@@ -15,7 +15,7 @@ from django.utils.http import urlsafe_base64_decode
 class PaymentDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentDetails
-        fields = ['id', 'order', 'amount', 'network', 'status', 'created_at']
+        fields = ['id', 'order', 'amount', 'quantity', 'network', 'status', 'crop', 'created_at']
 
 #userAddress
 class UserAddressSerializer(serializers.ModelSerializer):
@@ -413,7 +413,7 @@ class MarketTrendSerializer(serializers.ModelSerializer):
 class UserInteractionLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserInteractionLog
-        fields = ['id', 'crop', 'action', 'timestamp']
+        fields = ['id', 'crop', 'action',  'monthly_stats', 'timestamp']
 
 # =================================================================== #
 #Payment Options

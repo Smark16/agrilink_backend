@@ -31,7 +31,7 @@ class payMethodAdmin(admin.ModelAdmin):
     list_display = ["id", "user", "methodType", "contact_phone", "contact_email", "contact_name"]
 
 class paymentDetailsAdmin(admin.ModelAdmin):
-    list_display = ['id', 'order']
+    list_display = ['id', 'order', 'fullname','phone_number','email','tx_ref','amount','network','status' ,'created_at']
 
 admin.site.register(User, UserAdmin)
 admin.site.register(Buyer, BuyerAdmin)

@@ -7,6 +7,7 @@ import firebase_admin
 from firebase_admin import credentials
 import os
 
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -14,7 +15,7 @@ service_account_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 if service_account_path is None:
     raise ValueError("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set.")
 
-cred = credentials.Certificate(service_account_path)
+cred = credentials.Certificate(str(service_account_path))
 FIREBASE_APP = firebase_admin.initialize_app(cred)
 
 # Quick-start development settings - unsuitable for production
@@ -180,12 +181,13 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 9,
 }
 
+
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(weeks=5),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=10),
     "ROTATE_REFRESH_TOKENS": True,
 
-    "ALGORITHM": "HS256",
+    "ALGORITHM": "HS256",  # Google uses RS256, not HS256
     "SIGNING_KEY": SECRET_KEY,
 
     "AUTH_HEADER_TYPES": ("Bearer",),
@@ -193,6 +195,7 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
 
     "JTI_CLAIM": "jti",
+    "LEEWAY": timedelta(minutes=5),  # Allow a small time difference
 }
 
 INTERNAL_IPS = [

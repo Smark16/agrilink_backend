@@ -70,41 +70,6 @@ class SingleUser(generics.RetrieveAPIView):
           serializer = self.get_serializer(instance)
           return Response(serializer.data, status=status.HTTP_200_OK)
       
-#fcm token update
-# class SaveFCMTokenView(generics.UpdateAPIView):
-#     queryset = User.objects.all()
-#     serializer_class = UserSerializer
-#     permission_classes = [IsAuthenticated]
-
-#     def patch(self, request, *args, **kwargs):
-#         user = self.get_object()
-        
-#         if user != request.user:
-#             return Response({"error": "You do not have permission to update this user's FCM token."}, 
-#                             status=status.HTTP_403_FORBIDDEN)
-
-#         fcm_token = request.data.get('fcm_token')
-#         if fcm_token:
-#             try:
-#                 # Check if the device already exists for this user
-#                 existing_device = FCMDevice.objects.filter(user=user, registration_id=fcm_token).first()
-                
-#                 if not existing_device:
-#                     # If no device exists, create a new one
-#                     fcm_device = FCMDevice()
-#                     fcm_device.registration_id = fcm_token
-#                     fcm_device.user = user
-#                     fcm_device.save()
-#                 else:
-#                     # If device exists, update the registration_id
-#                     existing_device.registration_id = fcm_token
-#                     existing_device.save()
-                
-#                 return Response({"message": "FCM token updated successfully"}, status=status.HTTP_200_OK)
-#             except Exception as e:
-#                 return Response({"error": f"An error occurred while saving the token: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-#         else:
-#             return Response({"error": "FCM token is required"}),
 
 class SaveFCMTokenView(generics.UpdateAPIView):
     queryset = User.objects.all()
@@ -909,47 +874,49 @@ class PostCropPerformanceView(generics.ListCreateAPIView):
     queryset = CropPerformance.objects.all()
     serializer_class = CropPerformanceSerializer
 
-# get monthly sales
+#monthly sales
+
 class MonthlySalesView(APIView):
     def get(self, request, crop_id):
-        # Using timezone.now() for timezone awareness
         current_year = timezone.now().year
         current_month = timezone.now().month
 
-        # Fetch performance data for the current and previous year
-        # Note: We're assuming 'CropPerformance' is updated in real-time by the consumer or another mechanism
-        performances = (
-            CropPerformance.objects.filter(orderCrop__id=crop_id)
-            .annotate(
-                month=ExtractMonth('date'),
-                year=ExtractYear('date')
-            )
-            .values('year', 'month')
-            .annotate(
-                # Use Case to handle potential zero quantities or missing data
-                total_quantity_sold=Sum(
-                    Case(
-                        When(orderCrop__quantity__gt=0, then=F('orderCrop__quantity')),
-                        default=Value(0),
-                        output_field=models.IntegerField()
-                    )
-                ),
-                # Calculating revenue directly from quantity and price
-                total_revenue=Sum(
-                    F('orderCrop__quantity') * F('orderCrop__price_per_unit'),
-                    output_field=models.FloatField()
-                )
-            )
-            .filter(
-                Q(year=current_year, month__lte=current_month) | Q(year=current_year - 1)
-            )
+        # Fetch payment details for the specified crop_id
+        payments = PaymentDetails.objects.filter(crop__id=crop_id).annotate(
+            month=ExtractMonth('created_at'),
+            year=ExtractYear('created_at')
+        ).filter(
+            Q(year=current_year, month__lte=current_month) | Q(year=current_year - 1)
         )
 
-        # Convert performances to a dictionary for quick lookup
-        existing_data = {
-            f"{perf['year']}-{perf['month']}": perf 
-            for perf in performances
-        }
+        # Initialize data structure for aggregation
+        monthly_data = {}
+
+        # Process each payment record
+        for payment in payments:
+            year = payment.year
+            month = payment.month
+            key = f"{year}-{month}"
+
+            if key not in monthly_data:
+                monthly_data[key] = {
+                    "year": year,
+                    "month": month,
+                    "total_quantity": 0,
+                    "total_amount": 0.0
+                }
+
+            # Extract amount and quantity for the specific crop_id from JSON
+            amount_list = payment.amount  # List of {"id": crop_id, "amount": value}
+            quantity_list = payment.quantity  # List of {"id": crop_id, "quantity": value}
+
+            for amount_entry in amount_list:
+                if str(amount_entry.get("id")) == str(crop_id):
+                    monthly_data[key]["total_amount"] += float(amount_entry.get("amount", 0))
+
+            for quantity_entry in quantity_list:
+                if str(quantity_entry.get("id")) == str(crop_id):
+                    monthly_data[key]["total_quantity"] += int(quantity_entry.get("quantity", 0))
 
         # Prepare data for the current year up to the current month
         data = []
@@ -958,20 +925,20 @@ class MonthlySalesView(APIView):
             record = {
                 "year": current_year,
                 "month": month,
-                "total_quantity_sold": existing_data.get(key, {}).get("total_quantity_sold", 0),
-                "total_revenue": existing_data.get(key, {}).get("total_revenue", 0.0),
+                "total_quantity": monthly_data.get(key, {}).get("total_quantity", 0),
+                "total_amount": monthly_data.get(key, {}).get("total_amount", 0.0),
             }
             data.append(record)
 
         # Include previous year's data for months from the current month to December
         for month in range(current_month, 13):
             key = f"{current_year - 1}-{month}"
-            if key in existing_data:
+            if key in monthly_data:
                 data.append({
                     "year": current_year - 1,
                     "month": month,
-                    "total_quantity_sold": existing_data[key].get("total_quantity_sold", 0),
-                    "total_revenue": existing_data[key].get("total_revenue", 0.0),
+                    "total_quantity": monthly_data[key]["total_quantity"],
+                    "total_amount": monthly_data[key]["total_amount"],
                 })
 
         # Sort the data by year and month
@@ -1036,70 +1003,80 @@ class UserInteractionLogView(generics.ListCreateAPIView):
     queryset = UserInteractionLog.objects.all()
     serializer_class = UserInteractionLogSerializer
 
-
-# user interaction logs
+#crop_actions for the crop
 @api_view(['GET'])
-def crop_actions(request, crop_id):
+def GetCropActions(request, crop_id):
     try:
-        # Get current year and month
-        current_year = datetime.now().year
-        current_month = datetime.now().month
+        cropAction = UserInteractionLog.objects.filter(crop=crop_id).order_by('-timestamp')
+    except UserInteractionLog.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    if request.method == 'GET':
+        serializer = UserInteractionLogSerializer(cropAction, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+# user interaction logs
+# @api_view(['GET'])
+# def crop_actions(request, crop_id):
+#     try:
+#         # Get current year and month
+#         current_year = datetime.now().year
+#         current_month = datetime.now().month
 
-        # Fetch interaction data
-        crop_interactions = UserInteractionLog.objects.filter(crop_id=crop_id) \
-            .annotate(
-                month=ExtractMonth('timestamp'),
-                year=ExtractYear('timestamp')
-            ) \
-            .values('year', 'month') \
-            .annotate(
-                views=Count('id', filter=Q(action='view')),
-                purchases=Count('id', filter=Q(action='purchase'))
-            )
+#         # Fetch interaction data
+#         crop_interactions = UserInteractionLog.objects.filter(crop_id=crop_id) \
+#             .annotate(
+#                 month=ExtractMonth('timestamp'),
+#                 year=ExtractYear('timestamp')
+#             ) \
+#             .values('year', 'month') \
+#             .annotate(
+#                 views=Count('id', filter=Q(action='view')),
+#                 purchases=Count('id', filter=Q(action='purchase'))
+#             )
 
-        # Convert interactions to dictionary for quick lookup
-        existing_data = {f"{interaction['year']}-{interaction['month']}": interaction for interaction in crop_interactions}
+#         # Convert interactions to dictionary for quick lookup
+#         existing_data = {f"{interaction['year']}-{interaction['month']}": interaction for interaction in crop_interactions}
 
-        # Prepare data with defaults for current year up to current month
-        monthly_data = []
-        for month in range(1, current_month + 1):  # Only up to the current month
-            key = f"{current_year}-{month}"
-            record = {
-                "year": current_year,
-                "month": month,
-                "views": 0,
-                "purchases": 0
-            }
-            if key in existing_data:
-                record.update({
-                    "views": existing_data[key]["views"] or 0,
-                    "purchases": existing_data[key]["purchases"] or 0
-                })
-            monthly_data.append(record)
+#         # Prepare data with defaults for current year up to current month
+#         monthly_data = []
+#         for month in range(1, current_month + 1):  # Only up to the current month
+#             key = f"{current_year}-{month}"
+#             record = {
+#                 "year": current_year,
+#                 "month": month,
+#                 "views": 0,
+#                 "purchases": 0
+#             }
+#             if key in existing_data:
+#                 record.update({
+#                     "views": existing_data[key]["views"] or 0,
+#                     "purchases": existing_data[key]["purchases"] or 0
+#                 })
+#             monthly_data.append(record)
 
-        # Include last year's data for the months that match or exceed the current month
-        for month in range(current_month, 13):  # From current month to December of last year
-            key = f"{current_year - 1}-{month}"
-            if key in existing_data:
-                monthly_data.append({
-                    "year": current_year - 1,
-                    "month": month,
-                    "views": existing_data[key]["views"] or 0,
-                    "purchases": existing_data[key]["purchases"] or 0
-                })
+#         # Include last year's data for the months that match or exceed the current month
+#         for month in range(current_month, 13):  # From current month to December of last year
+#             key = f"{current_year - 1}-{month}"
+#             if key in existing_data:
+#                 monthly_data.append({
+#                     "year": current_year - 1,
+#                     "month": month,
+#                     "views": existing_data[key]["views"] or 0,
+#                     "purchases": existing_data[key]["purchases"] or 0
+#                 })
 
-        # Sort by date
-        monthly_data.sort(key=lambda x: (x['year'], x['month']))
+#         # Sort by date
+#         monthly_data.sort(key=lambda x: (x['year'], x['month']))
 
-        if not monthly_data:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+#         if not monthly_data:
+#             return Response(status=status.HTTP_404_NOT_FOUND)
 
-        return Response({
-            'monthly_stats': monthly_data
-        }, status=status.HTTP_200_OK)
+#         return Response({
+#             'monthly_stats': monthly_data
+#         }, status=status.HTTP_200_OK)
 
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#     except Exception as e:
+#         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     
 #END USER INTERACTION VIEWS
@@ -1165,224 +1142,6 @@ class UpdateDeliveryOption(generics.UpdateAPIView):
     
 #========================================================================================#
 #flutter wave payment
-# @api_view(['POST'])
-# def initiate_mobile_money_payment(request):
-#     if request.method == 'POST':
-#         # ✅ Use request.data instead of request.POST
-#         data = request.data  
-        
-#         amount = data.get('amount')
-#         email = data.get('email')
-#         phone_number = data.get('phone_number')
-#         fullname = data.get('fullname')
-#         tx_ref = data.get('tx_ref')  # Unique transaction reference
-#         order_id = data.get('order')  # Optional
-#         network = data.get('network')  # "MTN" or "Airtel"
-
-#         # Check if the order exists
-#         try:
-#             order = Order.objects.get(id=order_id)
-#         except Order.DoesNotExist:
-#             return Response({"error": "Order not found"}, status=404)
-
-#         # Fetch crops associated with this order to find the farmer
-#         try:
-#             order_crop = OrderCrop.objects.filter(orderdetail__order=order).first()
-#             if not order_crop:
-#                 return Response({"error": "No crops associated with this order"}, status=404)
-            
-#             farmer = order_crop.user  # Assuming OrderCrop.user is the farmer for this order
-#             farmer_payment_method = get_object_or_404(PaymentMethod, user=farmer)
-#             farmer_phone_number = farmer_payment_method.contact_phone
-#             farmer_name = farmer_payment_method.contact_name
-#         except PaymentMethod.DoesNotExist:
-#             return Response({"error": "Payment method for farmer not found"}, status=404)
-        
-#           # Store the payment in the database
-#         PaymentDetails.objects.create(
-#             amount=amount,
-#             email=email,
-#             phone_number=phone_number,
-#             fullname=fullname,
-#             tx_ref=tx_ref,
-#             order=order,  # Link to the Order model
-#             network=network
-#         )
-
-#         # ✅ Ensure required fields are present
-#         if not all([amount, email, phone_number, tx_ref]):
-#             return Response({"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Prepare payload for Flutterwave
-#         payload = {
-#             "account_bank": network,  # ✅ Specifies it's a mobile money transfer
-#             "account_number": farmer_phone_number,  # ✅ Farmer's number as the recipient
-#             "amount": amount,
-#             "currency": "UGX",
-#             "beneficiary_name": farmer_name,  # ✅ The farmer's name
-#             "reference": tx_ref,  # ✅ Unique transaction reference
-#             "narration": "Payment for farm products",
-#             "debit_currency": "UGX"
-#         }
-
-#         # Headers
-#         headers = {
-#             "accept": "application/json",
-#             "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
-#             "Content-Type": "application/json"
-#         }
-
-#         # Flutterwave API request
-#         url = "https://api.flutterwave.com/v3/transfers"
-
-#         response = requests.post(url, json=payload, headers=headers)
-
-#         # Return Flutterwave response
-#         try:
-#             return Response(response.json(), status=response.status_code)
-#         except ValueError:
-#             return Response({"error": "Invalid response from Flutterwave", "details": response.text}, status=status.HTTP_502_BAD_GATEWAY)
-
-#     return Response({"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
-
-# @api_view(['POST'])
-# def initiate_mobile_money_payment(request):
-#     if request.method == 'POST':
-#         # ✅ Use request.data instead of request.POST
-#         data = request.data  
-        
-#         amount = float(data.get('amount'))  # Total amount from the buyer
-#         email = data.get('email')
-#         phone_number = data.get('phone_number')
-#         fullname = data.get('fullname')
-#         tx_ref = data.get('tx_ref')  # Unique transaction reference
-#         order_id = data.get('order')  # Order ID
-#         network = data.get('network')  # "MTN" or "Airtel"
-
-#         # ✅ Ensure required fields are present
-#         if not all([amount, email, phone_number, tx_ref, order_id, network]):
-#             return Response({"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Check if the order exists
-#         try:
-#             order = Order.objects.get(id=order_id)
-#         except Order.DoesNotExist:
-#             return Response({"error": "Order not found"}, status=404)
-
-#         # Fetch crops associated with this order to find the farmer
-#         try:
-#             order_crop = OrderCrop.objects.filter(orderdetail__order=order).first()
-#             if not order_crop:
-#                 return Response({"error": "No crops associated with this order"}, status=404)
-            
-#             farmer = order_crop.user  # Assuming OrderCrop.user is the farmer for this order
-#             farmer_payment_method = get_object_or_404(PaymentMethod, user=farmer)
-#             farmer_phone_number = farmer_payment_method.contact_phone
-#             farmer_name = farmer_payment_method.contact_name
-#         except PaymentMethod.DoesNotExist:
-#             return Response({"error": "Payment method for farmer not found"}, status=404)
-
-#         # Calculate commission and farmer's share
-#         commission = amount * 0.075  # 7.5% commission
-#         farmer_amount = amount - commission  # 92.5% to the farmer
-
-#         # Store the payment in the database
-#         PaymentDetails.objects.create(
-#             amount=amount,
-#             email=email,
-#             phone_number=phone_number,
-#             fullname=fullname,
-#             tx_ref=tx_ref,
-#             order=order,  # Link to the Order model
-#             network=network,
-#         )
-
-#         # Step 1: Charge the buyer (total amount)
-#         charge_payload = {
-#             "tx_ref": tx_ref,
-#             "amount": str(amount),
-#             "currency": "UGX",
-#             "payment_options": "mobilemoneyuganda",
-#             "redirect_url": " https://4e77-102-220-202-206.ngrok-free.app/buyer/payment-callback/",  # Callback URL
-#             "customer": {
-#                 "email": email,
-#                 "phone_number": phone_number,
-#                 "name": fullname
-#             },
-#             "customizations": {
-#                 "title": "Farmers Platform",
-#                 "description": "Payment for farm products",
-#                 "logo": "https://yourwebsite.com/logo.png"
-#             }
-#         }
-
-#         charge_headers = {
-#             "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
-#             "Content-Type": "application/json"
-#         }
-
-#         charge_response = requests.post(
-#             "https://api.flutterwave.com/v3/payments",
-#             #  "https://api.flutterwave.com/v3/charges?type=mobile_money_uganda",
-#             json=charge_payload,
-#             headers=charge_headers
-#         )
-
-#         if charge_response.status_code != 200:
-#             return Response({"error": "Failed to initiate payment", "details": charge_response.text}, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Step 2: Transfer the farmer's share
-#         transfer_payload = {
-#             "account_bank": network,  # "MTN" or "Airtel"
-#             "account_number": farmer_phone_number,  # Farmer's phone number
-#             "amount": farmer_amount,
-#             "currency": "UGX",
-#             "beneficiary_name": farmer_name,
-#             "reference": f"{tx_ref}_farmer",  # Unique reference for the transfer
-#             "narration": "Payment for farm products",
-#             "debit_currency": "UGX"
-#         }
-
-#         transfer_response = requests.post(
-#             "https://api.flutterwave.com/v3/transfers",
-#             json=transfer_payload,
-#             headers=charge_headers
-#         )
-
-#         if transfer_response.status_code != 200:
-#             return Response({"error": "Failed to transfer funds to farmer", "details": transfer_response.text}, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Step 3: Transfer the commission to your account
-#         commission_payload = {
-#             "account_bank": "AIRTEL",  # Replace with your bank code
-#             "account_number": "+256759079867",  # Replace with your account number
-#             "amount": commission,
-#             "currency": "UGX",
-#             "beneficiary_name": "AgriLink",
-#             "reference": f"{tx_ref}_commission",  # Unique reference for the transfer
-#             "narration": "Platform commission",
-#             "debit_currency": "UGX"
-#         }
-
-#         commission_response = requests.post(
-#             "https://api.flutterwave.com/v3/transfers",
-#             json=commission_payload,
-#             headers=charge_headers
-#         )
-
-#         if commission_response.status_code != 200:
-#             return Response({"error": "Failed to transfer commission", "details": commission_response.text}, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Return success response
-#         return Response({
-#             "message": "Payment initiated successfully",
-#             "charge_response": charge_response.json(),
-#             "transfer_response": transfer_response.json(),
-#             "commission_response": commission_response.json()
-#         }, status=status.HTTP_200_OK)
-
-#     return Response({"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
-
 @api_view(['POST'])
 def initiate_mobile_money_payment(request):
     if request.method != 'POST':
@@ -1394,13 +1153,15 @@ def initiate_mobile_money_payment(request):
     if not all(field in data for field in required_fields):
         return Response({"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
 
-    amount = float(data['amount'])
+    amount_data = data['amount']  # This is a list of objects: [{id: 3, amount: 2000}, {id: 2, amount: 6000}, {id: 1, amount: 5000}]
     email = data['email']
     phone_number = data['phone_number']
     fullname = data['fullname']
     tx_ref = data['tx_ref']
     order_id = data['order']
     network = data['network']
+    quantity = data['quantity']
+    crop_ids = data.get('crop', [])  # Assuming `crop` is a list of crop IDs
 
     try:
         order = Order.objects.get(id=order_id)
@@ -1411,7 +1172,7 @@ def initiate_mobile_money_payment(request):
         order_crop = OrderCrop.objects.filter(orderdetail__order=order).first()
         if not order_crop:
             return Response({"error": "No crops associated with this order"}, status=status.HTTP_404_NOT_FOUND)
-        
+    
         farmer = order_crop.user
         farmer_payment_method = PaymentMethod.objects.get(user=farmer)
         farmer_phone_number = farmer_payment_method.contact_phone
@@ -1419,8 +1180,12 @@ def initiate_mobile_money_payment(request):
     except PaymentMethod.DoesNotExist:
         return Response({"error": "Payment method for farmer not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    commission = amount * 0.075  # 7.5% commission
-    farmer_amount = amount - commission
+    # Calculate the total amount by summing up the amounts from the list
+    total_amount = sum(item['amount'] for item in amount_data)
+
+    # Calculate commission and farmer amount
+    commission = total_amount * 0.075  # 7.5% commission
+    farmer_amount = total_amount - commission
 
     headers = {
         "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
@@ -1429,7 +1194,7 @@ def initiate_mobile_money_payment(request):
 
     charge_payload = {
         "tx_ref": tx_ref,
-        "amount": str(amount),
+        "amount": str(total_amount),  # Use the total amount here
         "currency": "UGX",
         "payment_options": "mobilemoneyuganda",
         "redirect_url": "https://9a57-102-220-202-216.ngrok-free.app/buyer/payment-callback/",
@@ -1495,16 +1260,20 @@ def initiate_mobile_money_payment(request):
                 raise Exception(f"Commission transfer failed: {commission_data['message']}")
 
             # All steps completed successfully, now update database
-            PaymentDetails.objects.create(
-                amount=amount,
+            payment_details = PaymentDetails.objects.create(
+                amount=amount_data,  # Use the total amount here
                 email=email,
                 phone_number=phone_number,
                 fullname=fullname,
                 tx_ref=tx_ref,
                 order=order,
                 network=network,
+                quantity=quantity,
                 status="successful"
             )
+
+            # Assign crops to the payment_details object using .set()
+            payment_details.crop.set(crop_ids)
 
             return Response({
                 "message": "Payment processed successfully",
@@ -1517,3 +1286,8 @@ def initiate_mobile_money_payment(request):
         # Log the error for debugging and manual intervention if needed
         print(f"Payment processing error: {str(e)}")
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+#get payment details
+class GetPaymentDetails(generics.ListAPIView):
+    queryset = PaymentDetails.objects.all()
+    serializer_class = PaymentDetailSerializer

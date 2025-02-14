@@ -226,15 +226,16 @@ class Discount(models.Model):
 # payment details
 class PaymentDetails(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='payment')
+    crop = models.ManyToManyField(Crop)
+    quantity = models.JSONField(default=list)
     fullname = models.CharField(max_length=255)
     phone_number = models.PositiveIntegerField()
     email = models.EmailField(max_length=255)
     tx_ref = models.CharField(max_length=50, unique=True)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)  
+    amount = models.JSONField(default=list)  
     network = models.CharField(max_length=255)
     status = models.CharField(max_length=100, default='not payed')
     created_at = models.DateTimeField(auto_now_add=True)
-
 
 class CropPerformance(models.Model):
     orderCrop = models.ForeignKey(OrderCrop, on_delete=models.CASCADE, related_name='perfomance')
@@ -242,12 +243,12 @@ class CropPerformance(models.Model):
 
     @property
     def get_quantity_sold(self):
-        return self.orderCrop.quantity
+        return self.crop.quantity
 
     @property
     def get_crop_revenue(self):
-        return self.get_quantity_sold  * self.orderCrop.price_per_unit
-
+        return self.get_quantity_sold * self.crop.price_per_unit
+    
 #market trends
 class MarketTrend(models.Model):
     crop = models.ForeignKey(Crop, on_delete=models.CASCADE, related_name='market_trends')
@@ -277,7 +278,7 @@ class MarketTrend(models.Model):
         matched_crops = [name for name, score in similar_crops if score >= 80]
 
         # Query the database for matched crop names
-        return Crop.objects.filter(crop_name__in=matched_crops).aggregate(avg_price=Avg('price_per_kg'))['avg_price']
+        return Crop.objects.filter(crop_name__in=matched_crops).aggregate(avg_price=Avg('price_per_unit'))['avg_price']
 
     @property
     def farmer_pricing(self):
@@ -296,7 +297,7 @@ class MarketTrend(models.Model):
 
         # Query the database for matched crop names
         similar_crops_queryset = Crop.objects.filter(crop_name__in=matched_crops)
-        return [{"farmer": crop.user.username, "price_per_kg": crop.price_per_kg} for crop in similar_crops_queryset]
+        return [{"farmer": crop.user.username, "farm_Name":crop.user.profile.farmName, "price_per_unit": crop.price_per_unit, "unit": crop.unit} for crop in similar_crops_queryset]
 
     def add_demand(self, demand_increase):
         """
@@ -304,10 +305,12 @@ class MarketTrend(models.Model):
         """
         self.total_demand += demand_increase
         self.save()
+
 #userInteractionLog
 class UserInteractionLog(models.Model):
     crop = models.ForeignKey(Crop, on_delete=models.CASCADE, related_name='interaction_logs')
     action = models.CharField(max_length=100)  
+    monthly_stats = models.JSONField(default=list)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     

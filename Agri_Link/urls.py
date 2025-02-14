@@ -78,6 +78,7 @@ urlpatterns = [
   
    #paymentDetails
    path('post_payment_detail', PostPaymentDetails.as_view()),
+   path('get_payment_details', GetPaymentDetails.as_view()),
 
    #userAddress
    path('user_addresses/<int:user_id>', ListUserAddress),
@@ -97,7 +98,8 @@ urlpatterns = [
 
     # User Interaction Logs
     path('post_user-interactions/', UserInteractionLogView.as_view(), name='user_interactions'),
-    path('crop_actions/stats/<int:crop_id>', crop_actions),
+    # path('crop_actions/stats/<int:crop_id>', crop_actions),
+    path('get_crop_actions/<int:crop_id>', GetCropActions),
 
     #payment methods
     path("post_payment_method", PostPaymentMethod.as_view()),
