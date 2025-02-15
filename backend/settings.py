@@ -27,8 +27,15 @@ SECRET_KEY = 'django-insecure-q0m=8zvj=y4hsi+we3s^o57&tad46fxoo(ody6i0d(h&wq^m6#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = [
+    'agrilink-backend-hjzl.onrender.com',
+    'localhost',  # For local development
+    '127.0.0.1',  # For local development
+]
 
+CSRF_TRUSTED_ORIGINS = [
+    'https://agrilink-backend-hjzl.onrender.com',
+]
 
 # Application definition
 
