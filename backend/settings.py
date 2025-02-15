@@ -178,7 +178,8 @@ AUTH_USER_MODEL = 'Agri_Link.User'
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
-     "https://cf98-41-75-190-65.ngrok-free.app" 
+     "http://localhost:5174",
+     "https://agrilink-jfb9.onrender.com"
 ]
 
 REST_FRAMEWORK = {
