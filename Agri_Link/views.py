@@ -75,64 +75,6 @@ class SingleUser(generics.RetrieveAPIView):
           return Response(serializer.data, status=status.HTTP_200_OK)
       
 
-# class SaveFCMTokenView(generics.UpdateAPIView):
-#     queryset = User.objects.all()
-#     serializer_class = UserSerializer
-#     permission_classes = [IsAuthenticated]
-
-#     def patch(self, request, *args, **kwargs):
-#         user = self.get_object()
-        
-#         # Ensure the user is updating their own FCM token
-#         if user != request.user:
-#             return Response(
-#                 {"error": "You do not have permission to update this user's FCM token."},
-#                 status=status.HTTP_403_FORBIDDEN
-#             )
-
-#         fcm_token = request.data.get('fcm_token')
-#         if not fcm_token:
-#             return Response(
-#                 {"error": "FCM token is required"},
-#                 status=status.HTTP_400_BAD_REQUEST
-#             )
-
-#         try:
-#             # Check if the token already exists in the database (for any user)
-#             existing_device = FCMDevice.objects.filter(registration_id=fcm_token).first()
-
-#             if existing_device:
-#                 # If the token exists, update the associated user
-#                 if existing_device.user != user:
-#                     existing_device.user = user
-#                     existing_device.save()
-#                     return Response(
-#                         {"message": "FCM token updated successfully (reassigned to current user)"},
-#                         status=status.HTTP_200_OK
-#                     )
-#                 else:
-#                     return Response(
-#                         {"message": "FCM token is already associated with this user"},
-#                         status=status.HTTP_200_OK
-#                     )
-#             else:
-#                 # If the token doesn't exist, create a new FCMDevice for the user
-#                 FCMDevice.objects.create(
-#                     registration_id=fcm_token,
-#                     user=user,
-#                     type='web'  # or 'ios' or 'web', depending on your app
-#                 )
-#                 return Response(
-#                     {"message": "FCM token saved successfully"},
-#                     status=status.HTTP_200_OK
-#                 )
-
-#         except Exception as e:
-#             return Response(
-#                 {"error": f"An error occurred while saving the token: {str(e)}"},
-#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
-
 class SaveFCMTokenView(generics.UpdateAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
@@ -141,10 +83,7 @@ class SaveFCMTokenView(generics.UpdateAPIView):
     def patch(self, request, *args, **kwargs):
         user = self.get_object()
         
-        # Log request details for debugging
-        logger.info(f"Request received from: {request.META.get('HTTP_USER_AGENT')}")
-        logger.info(f"FCM Token: {request.data.get('fcm_token')}")
-
+        # Ensure the user is updating their own FCM token
         if user != request.user:
             return Response(
                 {"error": "You do not have permission to update this user's FCM token."},
@@ -159,9 +98,11 @@ class SaveFCMTokenView(generics.UpdateAPIView):
             )
 
         try:
+            # Check if the token already exists in the database (for any user)
             existing_device = FCMDevice.objects.filter(registration_id=fcm_token).first()
 
             if existing_device:
+                # If the token exists, update the associated user
                 if existing_device.user != user:
                     existing_device.user = user
                     existing_device.save()
@@ -175,18 +116,11 @@ class SaveFCMTokenView(generics.UpdateAPIView):
                         status=status.HTTP_200_OK
                     )
             else:
-                # Detect if the request is from a mobile browser
-                user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
-                if 'mobile' in user_agent or 'android' in user_agent or 'iphone' in user_agent:
-                    device_type = 'web_mobile'
-                else:
-                    device_type = 'web'
-
-                # Create a new FCM device
+                # If the token doesn't exist, create a new FCMDevice for the user
                 FCMDevice.objects.create(
                     registration_id=fcm_token,
                     user=user,
-                    type=device_type  # Set to web_mobile for mobile browsers
+                    type='web'  # or 'ios' or 'web', depending on your app
                 )
                 return Response(
                     {"message": "FCM token saved successfully"},
@@ -194,10 +128,76 @@ class SaveFCMTokenView(generics.UpdateAPIView):
                 )
 
         except Exception as e:
-            logger.error(f"Error saving FCM token: {str(e)}")
             return Response(
                 {"error": f"An error occurred while saving the token: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+# class SaveFCMTokenView(generics.UpdateAPIView):
+#     queryset = User.objects.all()
+#     serializer_class = UserSerializer
+#     permission_classes = [IsAuthenticated]
+
+#     def patch(self, request, *args, **kwargs):
+#         user = self.get_object()
+        
+#         # Log request details for debugging
+#         logger.info(f"Request received from: {request.META.get('HTTP_USER_AGENT')}")
+#         logger.info(f"FCM Token: {request.data.get('fcm_token')}")
+
+#         if user != request.user:
+#             return Response(
+#                 {"error": "You do not have permission to update this user's FCM token."},
+#                 status=status.HTTP_403_FORBIDDEN
+#             )
+
+#         fcm_token = request.data.get('fcm_token')
+#         if not fcm_token:
+#             return Response(
+#                 {"error": "FCM token is required"},
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+
+#         try:
+#             existing_device = FCMDevice.objects.filter(registration_id=fcm_token).first()
+
+#             if existing_device:
+#                 if existing_device.user != user:
+#                     existing_device.user = user
+#                     existing_device.save()
+#                     return Response(
+#                         {"message": "FCM token updated successfully (reassigned to current user)"},
+#                         status=status.HTTP_200_OK
+#                     )
+#                 else:
+#                     return Response(
+#                         {"message": "FCM token is already associated with this user"},
+#                         status=status.HTTP_200_OK
+#                     )
+#             else:
+#                 # Detect if the request is from a mobile browser
+#                 user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
+#                 if 'mobile' in user_agent or 'android' in user_agent or 'iphone' in user_agent:
+#                     device_type = 'web_mobile'
+#                 else:
+#                     device_type = 'web'
+
+#                 # Create a new FCM device
+#                 FCMDevice.objects.create(
+#                     registration_id=fcm_token,
+#                     user=user,
+#                     type=device_type  # Set to web_mobile for mobile browsers
+#                 )
+#                 return Response(
+#                     {"message": "FCM token saved successfully"},
+#                     status=status.HTTP_200_OK
+#                 )
+
+#         except Exception as e:
+#             logger.error(f"Error saving FCM token: {str(e)}")
+#             return Response(
+#                 {"error": f"An error occurred while saving the token: {str(e)}"},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 #END USER VIEWS
 
