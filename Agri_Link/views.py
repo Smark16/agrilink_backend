@@ -198,7 +198,7 @@ class SaveFCMTokenView(generics.UpdateAPIView):
 #             return Response(
 #                 {"error": f"An error occurred while saving the token: {str(e)}"},
 #                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            
 #END USER VIEWS
 
 # registration views
