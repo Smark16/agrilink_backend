@@ -33,6 +33,7 @@ from django.db import transaction
 import requests
 import uuid
 import re
+import user_agents
 
 # Create your views here.
 class ObtainaPairView(TokenObtainPairView):
