@@ -138,7 +138,7 @@ class SaveFCMTokenView(generics.UpdateAPIView):
 
     def patch(self, request, *args, **kwargs):
         user = self.get_object()
-        
+
         # Ensure the user is updating their own FCM token
         if user != request.user:
             return Response(
@@ -153,22 +153,30 @@ class SaveFCMTokenView(generics.UpdateAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
-            # Determine the device type based on the user agent
-            user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
-            device_type = self.get_device_type(user_agent)
+        # Detect device type from User-Agent header
+        user_agent = request.headers.get('User-Agent', '')
+        parsed_agent = user_agents.parse(user_agent)
 
+        if parsed_agent.is_mobile:
+            device_type = 'android'  # Most mobile browsers use Firebase Android push notifications
+        elif parsed_agent.is_tablet:
+            device_type = 'android'  # Tablets also use Firebase Android
+        elif parsed_agent.is_pc:
+            device_type = 'web'
+        else:
+            device_type = 'web'  # Fallback
+
+        try:
             # Check if the token already exists in the database (for any user)
             existing_device = FCMDevice.objects.filter(registration_id=fcm_token).first()
 
             if existing_device:
-                # If the token exists, update the associated user and device type
                 if existing_device.user != user:
                     existing_device.user = user
-                    existing_device.type = device_type  # Update device type
+                    existing_device.type = device_type  # Update type
                     existing_device.save()
                     return Response(
-                        {"message": "FCM token updated successfully (reassigned to current user)"},
+                        {"message": f"FCM token updated successfully (reassigned to {device_type})"},
                         status=status.HTTP_200_OK
                     )
                 else:
@@ -181,10 +189,10 @@ class SaveFCMTokenView(generics.UpdateAPIView):
                 FCMDevice.objects.create(
                     registration_id=fcm_token,
                     user=user,
-                    type=device_type  # Use the dynamically determined device type
+                    type=device_type
                 )
                 return Response(
-                    {"message": "FCM token saved successfully"},
+                    {"message": f"FCM token saved successfully for {device_type}"},
                     status=status.HTTP_200_OK
                 )
 
@@ -193,17 +201,6 @@ class SaveFCMTokenView(generics.UpdateAPIView):
                 {"error": f"An error occurred while saving the token: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-    def get_device_type(self, user_agent):
-        """
-        Determine the device type based on the user agent.
-        """
-        if re.search(r'android', user_agent):
-            return 'android'
-        elif re.search(r'iphone|ipad|ipod', user_agent):
-            return 'ios'
-        else:
-            return 'web'  # Default to 'web' for desktop browsers or unknown devices
         
 #END USER VIEWS
 
