@@ -32,8 +32,10 @@ from .utils import send_push_notification
 from django.db import transaction
 import requests
 import uuid
-import re
 import user_agents
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Create your views here.
 class ObtainaPairView(TokenObtainPairView):
@@ -138,8 +140,11 @@ class SaveFCMTokenView(generics.UpdateAPIView):
 
     def patch(self, request, *args, **kwargs):
         user = self.get_object()
+        
+        # Log request details for debugging
+        logger.info(f"Request received from: {request.META.get('HTTP_USER_AGENT')}")
+        logger.info(f"FCM Token: {request.data.get('fcm_token')}")
 
-        # Ensure the user is updating their own FCM token
         if user != request.user:
             return Response(
                 {"error": "You do not have permission to update this user's FCM token."},
@@ -153,30 +158,15 @@ class SaveFCMTokenView(generics.UpdateAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Detect device type from User-Agent header
-        user_agent = request.headers.get('User-Agent', '')
-        parsed_agent = user_agents.parse(user_agent)
-
-        if parsed_agent.is_mobile:
-            device_type = 'android'  # Most mobile browsers use Firebase Android push notifications
-        elif parsed_agent.is_tablet:
-            device_type = 'android'  # Tablets also use Firebase Android
-        elif parsed_agent.is_pc:
-            device_type = 'web'
-        else:
-            device_type = 'web'  # Fallback
-
         try:
-            # Check if the token already exists in the database (for any user)
             existing_device = FCMDevice.objects.filter(registration_id=fcm_token).first()
 
             if existing_device:
                 if existing_device.user != user:
                     existing_device.user = user
-                    existing_device.type = device_type  # Update type
                     existing_device.save()
                     return Response(
-                        {"message": f"FCM token updated successfully (reassigned to {device_type})"},
+                        {"message": "FCM token updated successfully (reassigned to current user)"},
                         status=status.HTTP_200_OK
                     )
                 else:
@@ -185,23 +175,30 @@ class SaveFCMTokenView(generics.UpdateAPIView):
                         status=status.HTTP_200_OK
                     )
             else:
-                # If the token doesn't exist, create a new FCMDevice for the user
+                # Detect if the request is from a mobile browser
+                user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
+                if 'mobile' in user_agent or 'android' in user_agent or 'iphone' in user_agent:
+                    device_type = 'web_mobile'
+                else:
+                    device_type = 'web'
+
+                # Create a new FCM device
                 FCMDevice.objects.create(
                     registration_id=fcm_token,
                     user=user,
-                    type=device_type
+                    type=device_type  # Set to web_mobile for mobile browsers
                 )
                 return Response(
-                    {"message": f"FCM token saved successfully for {device_type}"},
+                    {"message": "FCM token saved successfully"},
                     status=status.HTTP_200_OK
                 )
 
         except Exception as e:
+            logger.error(f"Error saving FCM token: {str(e)}")
             return Response(
                 {"error": f"An error occurred while saving the token: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
 #END USER VIEWS
 
 # registration views
