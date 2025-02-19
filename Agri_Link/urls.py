@@ -71,6 +71,7 @@ urlpatterns = [
    path('user_orders/<int:user_id>',UserOrder),
    path('single_order/<int:pk>', SingleOrder.as_view()),
    path('orders_for_farmer/<int:farmer_id>', orders_for_farmer),
+   path('daily_order_trends/<int:farmer_id>', daily_order_trends),
    path('update_status/<int:pk>', UpdateStatus.as_view()),
 
    #orderDetail
@@ -79,6 +80,8 @@ urlpatterns = [
    #paymentDetails
    path('post_payment_detail', PostPaymentDetails.as_view()),
    path('get_payment_details', GetPaymentDetails.as_view()),
+   path('daily_sales_trends/<int:farmer_id>', daily_sales_trends),
+   path('monthly_sales_trends_by_crop/<int:farmer_id>', monthly_sales_trends_by_crop),
 
    #userAddress
    path('user_addresses/<int:user_id>', ListUserAddress),
