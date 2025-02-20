@@ -229,7 +229,7 @@ class PasswordResetRequestView(APIView):
         uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
 
-        reset_url = f"http://localhost:5173/reset-password/{uidb64}/{token}/"
+        reset_url = f"https://agrilink-backend-hjzl.onrender.com/reset-password/{uidb64}/{token}/"
         subject = "Password Reset Request"
         message = render_to_string('password_reset_email.html', {
             'user': user,
@@ -239,7 +239,6 @@ class PasswordResetRequestView(APIView):
         send_email(user, subject, message)
 
         return Response({"message": "Password reset email sent."}, status=status.HTTP_200_OK)
-
 
 def send_email(user, subject, message):
     try:
@@ -1404,7 +1403,7 @@ def initiate_mobile_money_payment(request):
         "amount": str(total_amount),  # Use the total amount here
         "currency": "UGX",
         "payment_options": "mobilemoneyuganda",
-        "redirect_url": "https://9a57-102-220-202-216.ngrok-free.app/buyer/payment-callback/",
+        "redirect_url": "https://agrilink-backend-hjzl.onrender.com/buyer/payment-callback/",
         "customer": {
             "email": email,
             "phone_number": phone_number,
