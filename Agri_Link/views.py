@@ -1012,109 +1012,76 @@ class PostCropPerformanceView(generics.ListCreateAPIView):
     serializer_class = CropPerformanceSerializer
 
 #monthly sales
-
 class MonthlySalesView(APIView):
     def get(self, request, crop_id):
-        current_year = timezone.now().year
-        current_month = timezone.now().month
+        try:
+            # Fetch payment details for the specified crop_id
+            payments = PaymentDetails.objects.filter(crop__id=crop_id)
 
-        # Fetch payment details for the specified crop_id
-        payments = PaymentDetails.objects.filter(crop__id=crop_id).annotate(
-            month=ExtractMonth('created_at'),
-            year=ExtractYear('created_at'),
-            day=ExtractDay('created_at')  # Extract day for daily trends
-        ).filter(
-            Q(year=current_year, month__lte=current_month) | Q(year=current_year - 1)
-        )
+            # Initialize data structures for aggregation
+            daily_trends = defaultdict(lambda: {"total_quantity": 0, "total_amount": 0.0})
+            monthly_trends = defaultdict(lambda: {"total_quantity": 0, "total_amount": 0.0})
 
-        # Debug: Print all payments for the crop_id
-        print("Payments for crop_id:", crop_id)
-        for payment in payments:
-            print("Payment ID:", payment.id)
-            print("Amount List:", payment.amount)
-            print("Quantity List:", payment.quantity)
+            # Process each payment record
+            for payment in payments:
+                payment_date = payment.created_at.date()  # Extract the date part
+                month_key = payment_date.strftime("%B %Y")  # e.g., "February 2025"
 
-        # Initialize data structures for aggregation
-        monthly_data = {}
-        daily_data = defaultdict(lambda: {"total_quantity": 0, "total_amount": 0.0})
+                # Extract amount and quantity for the specific crop_id from JSON
+                amount_list = payment.amount  # List of {"id": crop_id, "amount": value}
+                quantity_list = payment.quantity  # List of {"id": crop_id, "quantity": value}
 
-        # Process each payment record
-        for payment in payments:
-            year = payment.year
-            month = payment.month
-            key = f"{year}-{month}"
+                # Sum amounts and quantities for the specific crop_id
+                for amount_entry in amount_list:
+                    if str(amount_entry.get("id")) == str(crop_id):
+                        daily_trends[payment_date]["total_amount"] += float(amount_entry.get("amount", 0))
+                        monthly_trends[month_key]["total_amount"] += float(amount_entry.get("amount", 0))
 
-            if key not in monthly_data:
-                monthly_data[key] = {
-                    "year": year,
-                    "month": month,
-                    "total_quantity": 0,
-                    "total_amount": 0.0
-                }
+                for quantity_entry in quantity_list:
+                    if str(quantity_entry.get("id")) == str(crop_id):
+                        daily_trends[payment_date]["total_quantity"] += int(quantity_entry.get("quantity", 0))
+                        monthly_trends[month_key]["total_quantity"] += int(quantity_entry.get("quantity", 0))
 
-            # Extract amount and quantity for the specific crop_id from JSON
-            amount_list = payment.amount  # List of {"id": crop_id, "amount": value}
-            quantity_list = payment.quantity  # List of {"id": crop_id, "quantity": value}
+            # Generate a list of all months and their daily trends
+            monthly_data = []
+            current_date = timezone.now().date()  # Get the current date
+            current_month_key = current_date.strftime("%B %Y")  # e.g., "February 2025"
 
-            # Debug: Print amount and quantity lists
-            print("Processing Payment ID:", payment.id)
-            print("Amount List:", amount_list)
-            print("Quantity List:", quantity_list)
+            for month, trends in monthly_trends.items():
+                # Get all days in the month
+                month_start = datetime.strptime(month, "%B %Y").date()
+                month_end = (
+                    (month_start.replace(day=1) + timedelta(days=32)
+                ).replace(day=1) - timedelta(days=1))
 
-            # Sum amounts and quantities for the specific crop_id
-            for amount_entry in amount_list:
-                if str(amount_entry.get("id")) == str(crop_id):
-                    monthly_data[key]["total_amount"] += float(amount_entry.get("amount", 0))
-                    if year == current_year and month == current_month:
-                        daily_data[payment.day]["total_amount"] += float(amount_entry.get("amount", 0))
+                # If the month is the current month, stop at the current day
+                if month == current_month_key:
+                    month_end = current_date
 
-            for quantity_entry in quantity_list:
-                if str(quantity_entry.get("id")) == str(crop_id):
-                    monthly_data[key]["total_quantity"] += int(quantity_entry.get("quantity", 0))
-                    if year == current_year and month == current_month:
-                        daily_data[payment.day]["total_quantity"] += int(quantity_entry.get("quantity", 0))
-
-        # Debug: Print aggregated monthly and daily data
-        print("Monthly Data:", monthly_data)
-        print("Daily Data:", daily_data)
-
-        # Prepare data for the current year up to the current month
-        data = []
-        for month in range(1, current_month + 1):
-            key = f"{current_year}-{month}"
-            record = {
-                "year": current_year,
-                "month": month,
-                "total_quantity": monthly_data.get(key, {}).get("total_quantity", 0),
-                "total_amount": monthly_data.get(key, {}).get("total_amount", 0.0),
-            }
-            if month == current_month:
-                # Add daily trends for the current month
-                daily_trends = []
-                for day in range(1, timezone.now().day + 1):
-                    daily_trends.append({
-                        "day": day,
-                        "total_quantity": daily_data.get(day, {}).get("total_quantity", 0),
-                        "total_amount": daily_data.get(day, {}).get("total_amount", 0.0),
+                daily_trends_for_month = []
+                current_day = month_start
+                while current_day <= month_end:
+                    daily_trends_for_month.append({
+                        "date": current_day.strftime("%Y-%m-%d"),
+                        "total_quantity": daily_trends.get(current_day, {}).get("total_quantity", 0),
+                        "total_amount": daily_trends.get(current_day, {}).get("total_amount", 0.0),
                     })
-                record["daily_trends"] = daily_trends
-            data.append(record)
+                    current_day += timedelta(days=1)
 
-        # Include previous year's data for months from the current month to December
-        for month in range(current_month, 13):
-            key = f"{current_year - 1}-{month}"
-            if key in monthly_data:
-                data.append({
-                    "year": current_year - 1,
+                monthly_data.append({
                     "month": month,
-                    "total_quantity": monthly_data[key]["total_quantity"],
-                    "total_amount": monthly_data[key]["total_amount"],
+                    "total_quantity": trends["total_quantity"],
+                    "total_amount": trends["total_amount"],
+                    "daily_trends": daily_trends_for_month,
                 })
 
-        # Sort the data by year and month
-        data.sort(key=lambda x: (x['year'], x['month']))
+            # Sort the data by month
+            monthly_data.sort(key=lambda x: datetime.strptime(x["month"], "%B %Y"))
 
-        return Response(data)
+            return Response(monthly_data)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
     
 # class MonthlySalesView(APIView):
 #     def get(self, request, crop_id):

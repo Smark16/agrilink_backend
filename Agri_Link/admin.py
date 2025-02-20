@@ -9,7 +9,7 @@ class BuyerAdmin(admin.ModelAdmin):
     list_display =['id','user','FullName', 'Email', 'contact', 'is_buyer']
 
 class FarmerAdmin(admin.ModelAdmin):
-    list_display =['id', 'FullName', 'Email', 'contact','co_operativeID', 'is_farmer']
+    list_display =['id', 'FullName', 'Email', 'contact','is_farmer']
 
 class ProfileAdmin(admin.ModelAdmin):
     list_display = ['id', 'image', 'verified', 'location']

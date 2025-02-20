@@ -2,8 +2,6 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.db.models.signals import post_save
 import math
-from django.db.models import Sum
-from django.utils import timezone
 from django.db.models import Avg
 import nltk
 from fuzzywuzzy import process
@@ -33,11 +31,10 @@ class User(AbstractUser):
         return self.username  # Fallback to username if no FullName is found
 
 class Farmer(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='farmer')
+    user = models.OneToOneField(User, on_delete=models.CASCADE, db_index=True, related_name='farmer')
     FullName = models.CharField(max_length=255, db_index=True)
     Email = models.EmailField(max_length=255, db_index=True)
-    contact = models.PositiveBigIntegerField(db_index=True)
-    co_operativeID = models.CharField(max_length=255, db_index=True)
+    contact = models.CharField(max_length=100, db_index=True)
     is_farmer = models.BooleanField(default=False, db_index=True)
 
     def clean(self):
@@ -54,7 +51,7 @@ class Buyer(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='buyer')
     FullName = models.CharField(max_length=255, db_index=True)
     Email = models.EmailField(max_length=255, db_index=True)
-    contact = models.PositiveBigIntegerField(db_index=True)
+    contact = models.CharField(max_length=100, db_index=True)
     is_buyer = models.BooleanField(default=False, db_index=True)
 
     def clean(self):

@@ -104,7 +104,7 @@ class FarmerRegistration(serializers.ModelSerializer):
 
     class Meta:
         model = Farmer
-        fields = ['id', 'FullName', 'Email', 'contact','co_operativeID', 'is_farmer', 'password', 'confirm_password']
+        fields = ['id', 'FullName', 'Email', 'contact','is_farmer', 'password', 'confirm_password']
 
     def validate(self, data):
         if data['password'] != data['confirm_password']:
@@ -116,9 +116,7 @@ class FarmerRegistration(serializers.ModelSerializer):
             'username': validated_data['contact'],
             'email': validated_data['Email'], 
              'is_farmer':validated_data.get('is_farmer', False),
-            # 'is_farmer': True,
         }
-
 
     # Check if a user with the same username exists
         if User.objects.filter(username=user_data['username']).exists():
@@ -137,13 +135,12 @@ class FarmerRegistration(serializers.ModelSerializer):
             FullName=validated_data['FullName'],
             Email=validated_data['Email'],
             contact=validated_data['contact'],
-            co_operativeID=validated_data['co_operativeID'],
             is_farmer = validated_data.get('is_farmer', False),
         )
         
         # Send welcome email
         # self.send_welcome_email(student)
-        
+
         return farmer
     
 #RESET PASSWORD
