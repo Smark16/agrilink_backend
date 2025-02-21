@@ -132,17 +132,17 @@ DEFAULT_CHANNEL_LAYER = 'default'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        # 'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        # 'NAME': 'agrilink_database',
-        # 'USER':'agrilink_database_user',
-        # 'PASSWORD':'XWVVzHNByvNtSNYIaAKErdCc4SrERrwS',
-        # 'HOST':'dpg-cus2vt2n91rc73dh0sb0-a.oregon-postgres.render.com',
-        # 'PORT':'5432',
+        # 'ENGINE': 'django.db.backends.sqlite3',
+        # 'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': 'agrilink_database_8zg4',
+        'USER':'agrilink_database_8zg4_user',
+        'PASSWORD':'GOpcP4im7aeTukPiJQvRbkLbZA5u5uxD',
+        'HOST':'dpg-cus5v6gfnakc73evpul0-a.oregon-postgres.render.com',
+        'PORT':'5432',
     }
 }
-
+#postgresql://agrilink_database_8zg4_user:GOpcP4im7aeTukPiJQvRbkLbZA5u5uxD@dpg-cus5v6gfnakc73evpul0-a.oregon-postgres.render.com/agrilink_database_8zg4
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
 
