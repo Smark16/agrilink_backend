@@ -226,7 +226,7 @@ class PaymentDetails(models.Model):
     crop = models.ManyToManyField(Crop)
     quantity = models.JSONField(default=list)
     fullname = models.CharField(max_length=255)
-    phone_number = models.PositiveIntegerField()
+    phone_number = models.BigIntegerField()
     email = models.EmailField(max_length=255)
     tx_ref = models.CharField(max_length=50, unique=True)
     amount = models.JSONField(default=list)  
