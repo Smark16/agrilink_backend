@@ -92,6 +92,7 @@ urlpatterns = [
    
    #farmer crop perfomance
    path('post_perfomance', PostCropPerformanceView.as_view()),
+   path('monthly_sales_overview/<int:crop_id>/<int:farmer_id>', DailyMonthlySalesView),
    path('monthly_sales_overview/<int:crop_id>', MonthlySalesView.as_view()),
 
     # Market Trends

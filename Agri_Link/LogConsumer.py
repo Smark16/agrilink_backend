@@ -8,8 +8,8 @@ from django.db.models.functions import ExtractMonth, ExtractYear
 
 class CropLogConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        self.user_id = self.scope['url_route']['kwargs']['id']
-        self.room_group_name = f'user_{self.user_id}'
+        # logs = 'user_logs'
+        self.room_group_name = 'crop_logs'
 
         await self.channel_layer.group_add(
             self.room_group_name,
@@ -72,11 +72,15 @@ class CropLogConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def get_updated_stats(self, crop_id):
-        """Fetch the updated view and purchase counts in real-time"""
-        current_year = datetime.now().year
-        current_month = datetime.now().month
+            """Fetch the updated view and purchase counts in real-time"""
+            current_year = datetime.now().year
+            current_month = datetime.now().month
 
-        interactions = UserInteractionLog.objects.filter(crop_id=crop_id) \
+            interactions = UserInteractionLog.objects.filter(
+                crop_id=crop_id,
+                timestamp__year=current_year,
+                timestamp__month__lte=current_month  # Only fetch up to the current month
+            ) \
             .annotate(
                 month=ExtractMonth('timestamp'),
                 year=ExtractYear('timestamp')
@@ -87,27 +91,27 @@ class CropLogConsumer(AsyncWebsocketConsumer):
                 purchases=Count('id', filter=Q(action='purchase'))
             )
 
-        # Convert interactions to dictionary for quick lookup
-        existing_data = {f"{i['year']}-{i['month']}": i for i in interactions}
+            # Convert interactions to dictionary for quick lookup
+            existing_data = {f"{i['year']}-{i['month']}": i for i in interactions}
 
-        # Prepare updated monthly data
-        monthly_data = []
-        for month in range(1, current_month + 1):  # Only up to the current month
-            key = f"{current_year}-{month}"
-            record = {
-                "year": current_year,
-                "month": month,
-                "views": 0,
-                "purchases": 0
-            }
-            if key in existing_data:
-                record.update({
-                    "views": existing_data[key]["views"] or 0,
-                    "purchases": existing_data[key]["purchases"] or 0
-                })
-            monthly_data.append(record)
+            # Prepare updated monthly data
+            monthly_data = []
+            for month in range(1, current_month + 1):  # Only up to the current month
+                key = f"{current_year}-{month}"
+                record = {
+                    "year": current_year,
+                    "month": month,
+                    "views": 0,
+                    "purchases": 0
+                }
+                if key in existing_data:
+                    record.update({
+                        "views": existing_data[key]["views"] or 0,
+                        "purchases": existing_data[key]["purchases"] or 0
+                    })
+                monthly_data.append(record)
 
-        return monthly_data  # Return updated stats
+            return monthly_data  # Return updated stats
 
     @database_sync_to_async
     def update_monthly_stats(self, crop_id, stats):

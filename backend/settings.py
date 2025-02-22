@@ -142,7 +142,7 @@ DATABASES = {
         'PORT':'5432',
     }
 }
-#postgresql://agrilink_database_8zg4_user:GOpcP4im7aeTukPiJQvRbkLbZA5u5uxD@dpg-cus5v6gfnakc73evpul0-a.oregon-postgres.render.com/agrilink_database_8zg4
+
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
 
