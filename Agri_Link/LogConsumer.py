@@ -29,8 +29,6 @@ class CropLogConsumer(AsyncWebsocketConsumer):
         crop = data.get('crop')
         action = data.get('action')
        
-        print(data, crop, action)
-
         await self.save_logs(action, crop)
 
         # Fetch updated counts after logging the action

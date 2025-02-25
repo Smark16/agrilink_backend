@@ -294,7 +294,7 @@ class MarketTrend(models.Model):
 
         # Query the database for matched crop names
         similar_crops_queryset = Crop.objects.filter(crop_name__in=matched_crops)
-        return [{"farmer": crop.user.username, "farm_Name":crop.user.profile.farmName, "price_per_unit": crop.price_per_unit, "unit": crop.unit} for crop in similar_crops_queryset]
+        return [{"farmer": crop.user.username, "farm_Name":crop.user.profile.farmName, "Location":crop.user.profile.location, "price_per_unit": crop.price_per_unit, "unit": crop.unit} for crop in similar_crops_queryset]
 
     def add_demand(self, demand_increase):
         """

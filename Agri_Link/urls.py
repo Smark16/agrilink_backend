@@ -96,13 +96,10 @@ urlpatterns = [
    path('monthly_sales_overview/<int:crop_id>', MonthlySalesView.as_view()),
 
     # Market Trends
-    path('market-trends/', MarketTrendView.as_view(), name='market_trends'),
     path('market-insights/<int:farmer_id>/', MarketInsights.as_view(), name='market-insights'),
     path('crop_market_insights/<int:crop_id>', crop_market_insights),
 
     # User Interaction Logs
-    path('post_user-interactions/', UserInteractionLogView.as_view(), name='user_interactions'),
-    # path('crop_actions/stats/<int:crop_id>', crop_actions),
     path('get_crop_actions/<int:crop_id>', GetCropActions),
 
     #payment methods

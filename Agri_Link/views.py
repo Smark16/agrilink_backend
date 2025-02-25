@@ -36,9 +36,9 @@ import user_agents
 from datetime import timedelta, datetime
 from collections import defaultdict
 from django.utils import timezone
-import logging
 
-logger = logging.getLogger(__name__)
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 # Create your views here.
 class ObtainaPairView(TokenObtainPairView):
@@ -1153,11 +1153,6 @@ class MonthlySalesView(APIView):
 
 #MARKET TREND VIEW
 
-# List and Create Market Trends
-class MarketTrendView(generics.ListCreateAPIView):
-    queryset = MarketTrend.objects.all()
-    serializer_class = MarketTrendSerializer
-
 # Get Aggregated Market Insights
 class MarketInsights(generics.ListAPIView):
     serializer_class = MarketTrendSerializer
@@ -1183,9 +1178,7 @@ class MarketTrendView(generics.ListCreateAPIView):
 #market insights
 @api_view(['GET'])
 def crop_market_insights(request, crop_id):
-    """
-    Retrieve aggregated insights for a specific crop's market trends.
-    """
+    #Retrieve aggregated insights for a specific crop's market trends.
     try:
         market_trend = MarketTrend.objects.select_related('crop').filter(crop_id=crop_id).first()
         if not market_trend:
@@ -1193,18 +1186,15 @@ def crop_market_insights(request, crop_id):
                             status=status.HTTP_404_NOT_FOUND)
 
         serializer = MarketTrendSerializer(market_trend)
+
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 #END MARKET TREND VIEWS
 
 #USER INTERACTIONS VIEWS
-
-# List and Create User Interaction Logs
-class UserInteractionLogView(generics.ListCreateAPIView):
-    queryset = UserInteractionLog.objects.all()
-    serializer_class = UserInteractionLogSerializer
 
 #crop_actions for the crop
 @api_view(['GET'])
