@@ -1178,7 +1178,7 @@ class MarketTrendView(generics.ListCreateAPIView):
 def crop_market_insights(request, crop_id):
     #Retrieve aggregated insights for a specific crop's market trends.
     try:
-        market_trend = MarketTrend.objects.select_related('crop').filter(crop=crop_id)
+        market_trend = MarketTrend.objects.select_related('crop').filter(crop_id=crop_id).first()
         if not market_trend:
             return Response({"error": "Crop not found or no market trends available."}, 
                             status=status.HTTP_404_NOT_FOUND)
