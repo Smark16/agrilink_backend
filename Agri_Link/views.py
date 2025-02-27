@@ -353,6 +353,7 @@ class ListCrops(generics.ListAPIView):
 class PostCrops(generics.ListCreateAPIView):
     queryset = Crop.objects.prefetch_related('ratings', 'crop_review')
     serializer_class = CropSerializer
+    parser_classes = [MultiPartParser, FormParser]  # Add these parsers
 
 #pagination
 
@@ -369,9 +370,6 @@ def ListFarmerCrops(request, farmer_id):
             'crops',
             'crops__ratings', #ratings of the crop
             'crops__crop_review',
-            # 'payment_method',
-            # 'delivery_options'
-            # 'crops__performance'
         ).get(id=farmer_id, is_farmer=True)
     except User.DoesNotExist:
         return Response({'detail': 'Farmer not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -1180,7 +1178,7 @@ class MarketTrendView(generics.ListCreateAPIView):
 def crop_market_insights(request, crop_id):
     #Retrieve aggregated insights for a specific crop's market trends.
     try:
-        market_trend = MarketTrend.objects.select_related('crop').filter(crop_id=crop_id).first()
+        market_trend = MarketTrend.objects.select_related('crop').filter(crop=crop_id)
         if not market_trend:
             return Response({"error": "Crop not found or no market trends available."}, 
                             status=status.HTTP_404_NOT_FOUND)
