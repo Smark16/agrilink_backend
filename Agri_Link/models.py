@@ -77,11 +77,10 @@ class Profile(models.Model):
     bio = models.TextField(max_length=255, blank=True, null=True)
     timestamp = models.DateTimeField(auto_now_add=True) 
     farmName = models.CharField(max_length=100, null=True, blank=True)
+    farm_Image = models.ImageField(blank=True, null=True, upload_to='farmImages/')
     specialisation = models.ManyToManyField(Specialisation)
     is_farmer = models.BooleanField()
     is_buyer = models.BooleanField()
-    #bio, social_links
-
 
 def create_profile(sender, instance, created, **kwargs):
     if created:
@@ -95,7 +94,6 @@ def save_profile(sender, instance, **kwargs):
 post_save.connect(create_profile, sender=User)
 post_save.connect(save_profile, sender=User)  
 
- 
 #payment method 
 class PaymentMethod(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='payment_method')

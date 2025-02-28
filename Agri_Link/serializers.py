@@ -195,7 +195,7 @@ class SpecialSerializer(serializers.ModelSerializer):
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
-        fields = ['id', 'user','image','location', 'bio', 'farmName', 'timestamp', 'is_buyer', 'is_farmer', 'specialisation']
+        fields = ['id', 'user','image','location', 'bio', 'farmName','farm_Image', 'timestamp', 'is_buyer', 'is_farmer', 'specialisation']
 
     def to_representation(self, instance):
         response = super().to_representation(instance)
