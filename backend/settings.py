@@ -5,6 +5,7 @@ from datetime import timedelta
 from firebase_admin import initialize_app
 import firebase_admin
 from firebase_admin import credentials
+import dj_database_url
 import os
 
 
@@ -18,14 +19,16 @@ if service_account_path is None:
 cred = credentials.Certificate(str(service_account_path))
 FIREBASE_APP = firebase_admin.initialize_app(cred)
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-q0m=8zvj=y4hsi+we3s^o57&tad46fxoo(ody6i0d(h&wq^m6#'
+#SECRET_KEY = 'django-insecure-q0m=8zvj=y4hsi+we3s^o57&tad46fxoo(ody6i0d(h&wq^m6#'
+
+SECRET_KEY = os.environ.get("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+#DEBUG = True
+
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = [
     'agrilink-backend-hjzl.onrender.com',
@@ -131,16 +134,13 @@ DEFAULT_CHANNEL_LAYER = 'default'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        # 'ENGINE': 'django.db.backends.sqlite3',
-        # 'NAME': BASE_DIR / 'db.sqlite3',
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'agrilink_database_8zg4',
-        'USER':'agrilink_database_8zg4_user',
-        'PASSWORD':'GOpcP4im7aeTukPiJQvRbkLbZA5u5uxD',
-        'HOST':'dpg-cus5v6gfnakc73evpul0-a.oregon-postgres.render.com',
-        'PORT':'5432',
-    }
+    # 'default': {
+    #     'ENGINE': 'django.db.backends.sqlite3',
+    #     'NAME': BASE_DIR / 'db.sqlite3',
+    # }
+    'default': dj_database_url.config(
+        default='postgres://agrilink_database_8zg4_user:GOpcP4im7aeTukPiJQvRbkLbZA5u5uxD@dpg-cus5v6gfnakc73evpul0-a.oregon-postgres.render.com:5432/agrilink_database_8zg4'
+       )
 }
 
 # Password validation
@@ -178,11 +178,15 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+if not DEBUG:
+    
+    STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
-# MEDIA_URL = 'https://agrilink-backend-hjzl.onrender.com/media/'
+
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
 
 # Default primary key field type

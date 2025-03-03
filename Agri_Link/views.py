@@ -37,8 +37,6 @@ from datetime import timedelta, datetime
 from collections import defaultdict
 from django.utils import timezone
 
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
 
 # Create your views here.
 class ObtainaPairView(TokenObtainPairView):
@@ -136,72 +134,6 @@ class SaveFCMTokenView(generics.UpdateAPIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-# class SaveFCMTokenView(generics.UpdateAPIView):
-#     queryset = User.objects.all()
-#     serializer_class = UserSerializer
-#     permission_classes = [IsAuthenticated]
-
-#     def patch(self, request, *args, **kwargs):
-#         user = self.get_object()
-        
-#         # Log request details for debugging
-#         logger.info(f"Request received from: {request.META.get('HTTP_USER_AGENT')}")
-#         logger.info(f"FCM Token: {request.data.get('fcm_token')}")
-
-#         if user != request.user:
-#             return Response(
-#                 {"error": "You do not have permission to update this user's FCM token."},
-#                 status=status.HTTP_403_FORBIDDEN
-#             )
-
-#         fcm_token = request.data.get('fcm_token')
-#         if not fcm_token:
-#             return Response(
-#                 {"error": "FCM token is required"},
-#                 status=status.HTTP_400_BAD_REQUEST
-#             )
-
-#         try:
-#             existing_device = FCMDevice.objects.filter(registration_id=fcm_token).first()
-
-#             if existing_device:
-#                 if existing_device.user != user:
-#                     existing_device.user = user
-#                     existing_device.save()
-#                     return Response(
-#                         {"message": "FCM token updated successfully (reassigned to current user)"},
-#                         status=status.HTTP_200_OK
-#                     )
-#                 else:
-#                     return Response(
-#                         {"message": "FCM token is already associated with this user"},
-#                         status=status.HTTP_200_OK
-#                     )
-#             else:
-#                 # Detect if the request is from a mobile browser
-#                 user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
-#                 if 'mobile' in user_agent or 'android' in user_agent or 'iphone' in user_agent:
-#                     device_type = 'web_mobile'
-#                 else:
-#                     device_type = 'web'
-
-#                 # Create a new FCM device
-#                 FCMDevice.objects.create(
-#                     registration_id=fcm_token,
-#                     user=user,
-#                     type=device_type  # Set to web_mobile for mobile browsers
-#                 )
-#                 return Response(
-#                     {"message": "FCM token saved successfully"},
-#                     status=status.HTTP_200_OK
-#                 )
-
-#         except Exception as e:
-#             logger.error(f"Error saving FCM token: {str(e)}")
-#             return Response(
-#                 {"error": f"An error occurred while saving the token: {str(e)}"},
-#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            
 #END USER VIEWS
 
 # registration views
@@ -323,6 +255,7 @@ def SingleProfile(request, user_id):
 class EditUserProfile(generics.UpdateAPIView):
     queryset = Profile.objects.all()
     serializer_class = ProfileSerializer
+    parser_classes = [MultiPartParser, FormParser] 
     lookup_field = 'user_id'  
 
     def update(self, request, *args, **kwargs):
@@ -1205,70 +1138,6 @@ def GetCropActions(request, crop_id):
         serializer = UserInteractionLogSerializer(cropAction, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-# user interaction logs
-# @api_view(['GET'])
-# def crop_actions(request, crop_id):
-#     try:
-#         # Get current year and month
-#         current_year = datetime.now().year
-#         current_month = datetime.now().month
-
-#         # Fetch interaction data
-#         crop_interactions = UserInteractionLog.objects.filter(crop_id=crop_id) \
-#             .annotate(
-#                 month=ExtractMonth('timestamp'),
-#                 year=ExtractYear('timestamp')
-#             ) \
-#             .values('year', 'month') \
-#             .annotate(
-#                 views=Count('id', filter=Q(action='view')),
-#                 purchases=Count('id', filter=Q(action='purchase'))
-#             )
-
-#         # Convert interactions to dictionary for quick lookup
-#         existing_data = {f"{interaction['year']}-{interaction['month']}": interaction for interaction in crop_interactions}
-
-#         # Prepare data with defaults for current year up to current month
-#         monthly_data = []
-#         for month in range(1, current_month + 1):  # Only up to the current month
-#             key = f"{current_year}-{month}"
-#             record = {
-#                 "year": current_year,
-#                 "month": month,
-#                 "views": 0,
-#                 "purchases": 0
-#             }
-#             if key in existing_data:
-#                 record.update({
-#                     "views": existing_data[key]["views"] or 0,
-#                     "purchases": existing_data[key]["purchases"] or 0
-#                 })
-#             monthly_data.append(record)
-
-#         # Include last year's data for the months that match or exceed the current month
-#         for month in range(current_month, 13):  # From current month to December of last year
-#             key = f"{current_year - 1}-{month}"
-#             if key in existing_data:
-#                 monthly_data.append({
-#                     "year": current_year - 1,
-#                     "month": month,
-#                     "views": existing_data[key]["views"] or 0,
-#                     "purchases": existing_data[key]["purchases"] or 0
-#                 })
-
-#         # Sort by date
-#         monthly_data.sort(key=lambda x: (x['year'], x['month']))
-
-#         if not monthly_data:
-#             return Response(status=status.HTTP_404_NOT_FOUND)
-
-#         return Response({
-#             'monthly_stats': monthly_data
-#         }, status=status.HTTP_200_OK)
-
-#     except Exception as e:
-#         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
     
 #END USER INTERACTION VIEWS
 
