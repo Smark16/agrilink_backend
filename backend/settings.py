@@ -8,6 +8,12 @@ from firebase_admin import credentials
 import dj_database_url
 import os
 
+#cloudinary to manage images and optimization
+import cloudinary_storage
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,8 +38,8 @@ DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = [
     'agrilink-backend-hjzl.onrender.com',
-    'localhost',  # For local development
-    '127.0.0.1',  # For local development
+    'localhost', 
+    '127.0.0.1',  
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -56,7 +62,9 @@ INSTALLED_APPS = [
 
     'rest_framework_simplejwt',
     'rest_framework',
-    "fcm_django"
+    "fcm_django",
+    'cloudinary_storage',
+    'cloudinary',
 ]
 
 # fcm push notifications
@@ -185,10 +193,6 @@ if not DEBUG:
 
     STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-MEDIA_URL = '/media/'
-
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
-
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
@@ -197,7 +201,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'Agri_Link.User'
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
+      "http://localhost:5173",
      "http://localhost:5174",
      "https://agrilink-jfb9.onrender.com"
 ]
@@ -233,6 +237,22 @@ INTERNAL_IPS = [
     "127.0.0.1",
     # ...
 ]
+
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': 'dnsx36nia',
+    'API_KEY': '555558364391432',
+    'API_SECRET': 'gHDioqg-d8yxJGaRmdzN1IbWOEc',
+    'SECURE': 'TRUE'
+}
+
+# Explicitly configure Cloudinary
+cloudinary.config(
+    cloud_name=CLOUDINARY_STORAGE['CLOUD_NAME'],
+    api_key=CLOUDINARY_STORAGE['API_KEY'],
+    api_secret=CLOUDINARY_STORAGE['API_SECRET'],
+)
+
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 # Email settings
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

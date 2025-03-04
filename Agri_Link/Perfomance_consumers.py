@@ -28,16 +28,15 @@ class CropPerformanceConsumer(AsyncWebsocketConsumer):
 
     async def receive(self, text_data):
         # Process incoming messages (e.g., payment events)
-        try:
-            data = json.loads(text_data)
-            event_type = data.get('type')
+                data = json.loads(text_data)
 
-            if event_type == 'payment_update':
-                # Extract update details (no payment data)
+            # Extract update details (no payment data)
                 farmer_id = data.get('farmer_id')
                 order_id = data.get('order_id')
                 crop_ids = data.get('crop_ids')
                 amount = data.get('amount')
+
+                print('perfomance data',  farmer_id,  order_id,  crop_ids, amount)
 
                 # Calculate and send real-time performance metrics
                 daily_monthly_sales = await self.get_daily_monthly_sales(farmer_id, crop_ids)
@@ -51,11 +50,7 @@ class CropPerformanceConsumer(AsyncWebsocketConsumer):
 
                 # Send updates to clients
                 await self.send_update_to_clients(sales_data)
-
-        except Exception as e:
-            print(f"Error processing WebSocket message: {str(e)}")
-            await self.send(text_data=json.dumps({"error": str(e)}))
-
+                
     @database_sync_to_async
     def get_daily_monthly_sales(self, farmer_id, crop_ids):
         try:

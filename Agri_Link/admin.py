@@ -12,11 +12,10 @@ class FarmerAdmin(admin.ModelAdmin):
     list_display =['id', 'FullName', 'Email', 'contact','is_farmer']
 
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ['id', 'image', 'verified', 'location']
+    list_display = ['id', 'verified', 'location']
 
 class CropAdmin(admin.ModelAdmin):
     list_display = ['id', 'user', 'specialisation', 'crop_name', 'image', 'weight', 'price_per_unit', 'availability']
-
 
 class DiscountAdmin(admin.ModelAdmin):
     list_display = ['id', 'description', 'discount_percent', 'crop']

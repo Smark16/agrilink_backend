@@ -6,6 +6,7 @@ from django.db.models import Avg
 import nltk
 from fuzzywuzzy import process
 from django.core.exceptions import ValidationError
+from cloudinary.models import CloudinaryField
 
 # Ensure you download necessary NLTK data
 nltk.download('punkt')
@@ -72,12 +73,12 @@ class Specialisation(models.Model):
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile') #select_related
     verified = models.BooleanField(default=False)
-    image = models.ImageField(blank=True, null=True, upload_to='images/')
+    image = CloudinaryField('image', folder='AgriLink_Images/', null=True, blank=True)
     location = models.CharField(max_length=100, blank=True, null=True)
     bio = models.TextField(max_length=255, blank=True, null=True)
     timestamp = models.DateTimeField(auto_now_add=True) 
     farmName = models.CharField(max_length=100, null=True, blank=True)
-    farm_Image = models.ImageField(blank=True, null=True, upload_to='farmImages/')
+    farm_Image = CloudinaryField('image', folder='AgriLink_Images/', null=True, blank=True)
     specialisation = models.ManyToManyField(Specialisation)
     is_farmer = models.BooleanField()
     is_buyer = models.BooleanField()
@@ -121,7 +122,7 @@ class Crop(models.Model):
     InitialAvailability = models.PositiveIntegerField()
     availability = models.PositiveIntegerField(default='0')
     quantity = models.PositiveIntegerField(default='0') #tracks quantity taken by buyer
-    image = models.ImageField(upload_to='crops/')
+    image = CloudinaryField('image', folder='AgriLink_Images/')
     date_added = models.DateTimeField(auto_now_add=True)
     
     @property
@@ -192,7 +193,7 @@ class OrderCrop(models.Model):
     weights = models.JSONField(default=list, blank=True, null=True)  
     price_per_unit = models.PositiveIntegerField() 
     unit = models.CharField(max_length=100)  
-    image = models.ImageField(upload_to='crops/')
+    image = CloudinaryField('image', folder='AgriLink_Images/')
     crop_name = models.CharField(max_length=100)
 
     @property
