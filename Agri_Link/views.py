@@ -1200,150 +1200,150 @@ class UpdateDeliveryOption(generics.UpdateAPIView):
     
 #========================================================================================#
 #flutter wave payment
-@api_view(['POST'])
-def initiate_mobile_money_payment(request):
-    if request.method != 'POST':
-        return Response({"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+# @api_view(['POST'])
+# def initiate_mobile_money_payment(request):
+#     if request.method != 'POST':
+#         return Response({"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
-    data = request.data  
+#     data = request.data  
     
-    required_fields = ['amount', 'email', 'phone_number', 'fullname', 'tx_ref', 'order', 'network']
-    if not all(field in data for field in required_fields):
-        return Response({"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
+#     required_fields = ['amount', 'email', 'phone_number', 'fullname', 'tx_ref', 'order', 'network']
+#     if not all(field in data for field in required_fields):
+#         return Response({"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
 
-    amount_data = data['amount']  # This is a list of objects: [{id: 3, amount: 2000}, {id: 2, amount: 6000}, {id: 1, amount: 5000}]
-    email = data['email']
-    phone_number = data['phone_number']
-    fullname = data['fullname']
-    tx_ref = data['tx_ref']
-    order_id = data['order']
-    network = data['network']
-    quantity = data['quantity']
-    crop_ids = data.get('crop', [])  # Assuming `crop` is a list of crop IDs
+#     amount_data = data['amount']  # This is a list of objects: [{id: 3, amount: 2000}, {id: 2, amount: 6000}, {id: 1, amount: 5000}]
+#     email = data['email']
+#     phone_number = data['phone_number']
+#     fullname = data['fullname']
+#     tx_ref = data['tx_ref']
+#     order_id = data['order']
+#     network = data['network']
+#     quantity = data['quantity']
+#     crop_ids = data.get('crop', [])  # Assuming `crop` is a list of crop IDs
 
-    try:
-        order = Order.objects.get(id=order_id)
-    except Order.DoesNotExist:
-        return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+#     try:
+#         order = Order.objects.get(id=order_id)
+#     except Order.DoesNotExist:
+#         return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    try:
-        order_crop = OrderCrop.objects.filter(orderdetail__order=order).first()
-        if not order_crop:
-            return Response({"error": "No crops associated with this order"}, status=status.HTTP_404_NOT_FOUND)
+#     try:
+#         order_crop = OrderCrop.objects.filter(orderdetail__order=order).first()
+#         if not order_crop:
+#             return Response({"error": "No crops associated with this order"}, status=status.HTTP_404_NOT_FOUND)
     
-        farmer = order_crop.user
-        farmer_payment_method = PaymentMethod.objects.get(user=farmer)
-        farmer_phone_number = farmer_payment_method.contact_phone
-        farmer_name = farmer_payment_method.contact_name
-    except PaymentMethod.DoesNotExist:
-        return Response({"error": "Payment method for farmer not found"}, status=status.HTTP_404_NOT_FOUND)
+#         farmer = order_crop.user
+#         farmer_payment_method = PaymentMethod.objects.get(user=farmer)
+#         farmer_phone_number = farmer_payment_method.contact_phone
+#         farmer_name = farmer_payment_method.contact_name
+#     except PaymentMethod.DoesNotExist:
+#         return Response({"error": "Payment method for farmer not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Calculate the total amount by summing up the amounts from the list
-    total_amount = sum(item['amount'] for item in amount_data)
+#     # Calculate the total amount by summing up the amounts from the list
+#     total_amount = sum(item['amount'] for item in amount_data)
 
-    # Calculate commission and farmer amount
-    commission = total_amount * 0.075  # 7.5% commission
-    farmer_amount = total_amount - commission
+#     # Calculate commission and farmer amount
+#     commission = total_amount * 0.075  # 7.5% commission
+#     farmer_amount = total_amount - commission
 
-    headers = {
-        "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
-        "Content-Type": "application/json"
-    }
+#     headers = {
+#         "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
+#         "Content-Type": "application/json"
+#     }
 
-    charge_payload = {
-        "tx_ref": tx_ref,
-        "amount": str(total_amount),  # Use the total amount here
-        "currency": "UGX",
-        "payment_options": "mobilemoneyuganda",
-        "redirect_url": "https://agrilink-backend-hjzl.onrender.com/buyer/payment-callback/",
-        "customer": {
-            "email": email,
-            "phone_number": phone_number,
-            "name": fullname
-        },
-        "customizations": {
-            "title": "Farmers Platform",
-            "description": "Payment for farm products",
-            "logo": "https://yourwebsite.com/logo.png"
-        }
-    }
+#     charge_payload = {
+#         "tx_ref": tx_ref,
+#         "amount": str(total_amount),  # Use the total amount here
+#         "currency": "UGX",
+#         "payment_options": "mobilemoneyuganda",
+#         "redirect_url": "https://agrilink-backend-hjzl.onrender.com/buyer/payment-callback/",
+#         "customer": {
+#             "email": email,
+#             "phone_number": phone_number,
+#             "name": fullname
+#         },
+#         "customizations": {
+#             "title": "Farmers Platform",
+#             "description": "Payment for farm products",
+#             "logo": "https://yourwebsite.com/logo.png"
+#         }
+#     }
 
-    try:
-        with transaction.atomic():
-            # Step 1: Charge the buyer
-            charge_response = requests.post("https://api.flutterwave.com/v3/payments", json=charge_payload, headers=headers)
-            if charge_response.status_code != 200:
-                raise Exception(f"Charge failed: {charge_response.text}")
+#     try:
+#         with transaction.atomic():
+#             # Step 1: Charge the buyer
+#             charge_response = requests.post("https://api.flutterwave.com/v3/payments", json=charge_payload, headers=headers)
+#             if charge_response.status_code != 200:
+#                 raise Exception(f"Charge failed: {charge_response.text}")
 
-            charge_data = charge_response.json()
-            if charge_data['status'] != 'success':
-                raise Exception(f"Payment initiation failed: {charge_data['message']}")
+#             charge_data = charge_response.json()
+#             if charge_data['status'] != 'success':
+#                 raise Exception(f"Payment initiation failed: {charge_data['message']}")
 
-            # Step 2: Transfer to farmer
-            transfer_payload = {
-                "account_bank": network,
-                "account_number": farmer_phone_number,
-                "amount": farmer_amount,
-                "currency": "UGX",
-                "beneficiary_name": farmer_name,
-                "reference": f"{tx_ref}_farmer",
-                "narration": "Payment for farm products",
-                "debit_currency": "UGX"
-            }
-            transfer_response = requests.post("https://api.flutterwave.com/v3/transfers", json=transfer_payload, headers=headers)
-            if transfer_response.status_code != 200:
-                raise Exception(f"Transfer to farmer failed: {transfer_response.text}")
+#             # Step 2: Transfer to farmer
+#             transfer_payload = {
+#                 "account_bank": network,
+#                 "account_number": farmer_phone_number,
+#                 "amount": farmer_amount,
+#                 "currency": "UGX",
+#                 "beneficiary_name": farmer_name,
+#                 "reference": f"{tx_ref}_farmer",
+#                 "narration": "Payment for farm products",
+#                 "debit_currency": "UGX"
+#             }
+#             transfer_response = requests.post("https://api.flutterwave.com/v3/transfers", json=transfer_payload, headers=headers)
+#             if transfer_response.status_code != 200:
+#                 raise Exception(f"Transfer to farmer failed: {transfer_response.text}")
 
-            transfer_data = transfer_response.json()
-            if transfer_data['status'] != 'success':
-                raise Exception(f"Transfer to farmer failed: {transfer_data['message']}")
+#             transfer_data = transfer_response.json()
+#             if transfer_data['status'] != 'success':
+#                 raise Exception(f"Transfer to farmer failed: {transfer_data['message']}")
 
-            # Step 3: Transfer the commission
-            commission_payload = {
-                "account_bank": "AIRTEL",  # Replace with your actual bank code
-                "account_number": "+256759079867",  # Replace with your actual account number
-                "amount": commission,
-                "currency": "UGX",
-                "beneficiary_name": "AgriLink",
-                "reference": f"{tx_ref}_commission",
-                "narration": "Platform commission",
-                "debit_currency": "UGX"
-            }
-            commission_response = requests.post("https://api.flutterwave.com/v3/transfers", json=commission_payload, headers=headers)
-            if commission_response.status_code != 200:
-                raise Exception(f"Commission transfer failed: {commission_response.text}")
+#             # Step 3: Transfer the commission
+#             commission_payload = {
+#                 "account_bank": "AIRTEL",  # Replace with your actual bank code
+#                 "account_number": "+256759079867",  # Replace with your actual account number
+#                 "amount": commission,
+#                 "currency": "UGX",
+#                 "beneficiary_name": "AgriLink",
+#                 "reference": f"{tx_ref}_commission",
+#                 "narration": "Platform commission",
+#                 "debit_currency": "UGX"
+#             }
+#             commission_response = requests.post("https://api.flutterwave.com/v3/transfers", json=commission_payload, headers=headers)
+#             if commission_response.status_code != 200:
+#                 raise Exception(f"Commission transfer failed: {commission_response.text}")
 
-            commission_data = commission_response.json()
-            if commission_data['status'] != 'success':
-                raise Exception(f"Commission transfer failed: {commission_data['message']}")
+#             commission_data = commission_response.json()
+#             if commission_data['status'] != 'success':
+#                 raise Exception(f"Commission transfer failed: {commission_data['message']}")
 
-            # All steps completed successfully, now update database
-            payment_details = PaymentDetails.objects.create(
-                amount=amount_data,  # Use the total amount here
-                email=email,
-                phone_number=phone_number,
-                fullname=fullname,
-                tx_ref=tx_ref,
-                order=order,
-                network=network,
-                quantity=quantity,
-                status="successful"
-            )
+#             # All steps completed successfully, now update database
+#             payment_details = PaymentDetails.objects.create(
+#                 amount=amount_data,  # Use the total amount here
+#                 email=email,
+#                 phone_number=phone_number,
+#                 fullname=fullname,
+#                 tx_ref=tx_ref,
+#                 order=order,
+#                 network=network,
+#                 quantity=quantity,
+#                 status="successful"
+#             )
 
-            # Assign crops to the payment_details object using .set()
-            payment_details.crop.set(crop_ids)
+#             # Assign crops to the payment_details object using .set()
+#             payment_details.crop.set(crop_ids)
 
-            return Response({
-                "message": "Payment processed successfully",
-                "charge_response": charge_data,
-                "transfer_response": transfer_data,
-                "commission_response": commission_data
-            }, status=status.HTTP_200_OK)
+#             return Response({
+#                 "message": "Payment processed successfully",
+#                 "charge_response": charge_data,
+#                 "transfer_response": transfer_data,
+#                 "commission_response": commission_data
+#             }, status=status.HTTP_200_OK)
 
-    except Exception as e:
-        # Log the error for debugging and manual intervention if needed
-        print(f"Payment processing error: {str(e)}")
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+#     except Exception as e:
+#         # Log the error for debugging and manual intervention if needed
+#         print(f"Payment processing error: {str(e)}")
+#         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 #get payment details
 class GetPaymentDetails(generics.ListAPIView):
