@@ -113,5 +113,5 @@ urlpatterns = [
     path('edit_delivery/<int:pk>', UpdateDeliveryOption.as_view()),
 
     #flutter wave url
-    path('initiate-mobile-money-payment/', initiate_mobile_money_payment, name='initiate_mobile_money_payment'),
+    # path('initiate-mobile-money-payment/', initiate_mobile_money_payment, name='initiate_mobile_money_payment'),
 ]
