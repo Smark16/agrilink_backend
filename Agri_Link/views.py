@@ -804,7 +804,7 @@ class PostOrderDetail(generics.ListCreateAPIView):
                     # Get all devices for this farmer
                     devices = FCMDevice.objects.filter(user=farmer)
                     notification_title = "AgriLink"
-                    notification_body = f"Yo yo {farmer.get_full_name}, One of your products has been ordered. Check your orders."
+                    notification_body = f"Hello {farmer.get_full_name} 👋, One of your products has been ordered. Check your orders."
 
                     # Debugging: Print farmer and devices
                     print(f"Sending notifications to farmer: {farmer.get_full_name}")
