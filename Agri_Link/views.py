@@ -1594,7 +1594,7 @@ class BuyerRecommendationView(APIView):
             
             recommendation = recommend_products_for_buyer(buyer_id, affinity_df, df)
             logger.info(f"Generated recommendation for Buyer {buyer_id}: {recommendation}")
-            return Response({f"Buyer {buyer_id}": recommendation}, status=status.HTTP_200_OK)
+            return Response({f"{buyer_id}": recommendation}, status=status.HTTP_200_OK)
         
         except Exception as e:
             logger.error(f"Error in BuyerRecommendationView: {str(e)}")
