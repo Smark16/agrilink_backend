@@ -1,15 +1,21 @@
-# recommendations/recommendation_utils.py
 import joblib
 import numpy as np
 import pandas as pd
 from fuzzywuzzy import fuzz, process
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import svds
+from pathlib import Path
 
 import logging
 
 logger = logging.getLogger(__name__)
 
+# Define base directory (project root) and data directory
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / 'data'
+
+# Ensure data directory exists (useful for local runs)
+DATA_DIR.mkdir(exist_ok=True)
 
 def preprocess_text(text):
     return str(text).lower().strip()
@@ -32,49 +38,62 @@ def group_similar_names(product_names, threshold=80):
     return groups
 
 def get_data():
-    csv_path = 'C:/Users/HP/Desktop/Datasets/agrilink_data.csv'  # Update to your expanded CSV
-    df = pd.read_csv(csv_path)
-    df.fillna(0, inplace=True)
-    
-    # Engineer general_name
-    product_names = df['product_name'].unique()
-    similar_names = group_similar_names(product_names, threshold=80)
-    df['general_name'] = df['product_name'].apply(lambda x: similar_names.get(preprocess_text(x), x))
-    
-    # Engineer demand_score_raw (ensure required columns exist)
-    required_cols = ['quantity_sold', 'purchases', 'views', 'interaction_count']
-    if all(col in df.columns for col in required_cols):
-        df['demand_score_raw'] = (
-            0.4 * df['quantity_sold'] +
-            0.3 * df['purchases'] +
-            0.2 * df['views'] +
-            0.1 * df['interaction_count']
-        ).round(6)
-    else:
-        raise ValueError(f"Missing required columns for demand_score_raw: {', '.join(set(required_cols) - set(df.columns))}")
-    
-    # Calculate interest_score
-    df['interest_score'] = (
-        df['purchases'] * 0.5 +
-        df['views'] * 0.3 +
-        df['interaction_count'] * 0.2
-    ) * df.apply(lambda row: 2.0 if row['buyer_location'] == row['farmer_location'] else 1.0, axis=1)
-    
-    return df
+    csv_path = DATA_DIR / 'agrilink_data.csv'
+    try:
+        df = pd.read_csv(csv_path)
+        df.fillna(0, inplace=True)
+        
+        # Engineer general_name
+        product_names = df['product_name'].unique()
+        similar_names = group_similar_names(product_names, threshold=80)
+        df['general_name'] = df['product_name'].apply(lambda x: similar_names.get(preprocess_text(x), x))
+        
+        # Engineer demand_score_raw (ensure required columns exist)
+        required_cols = ['quantity_sold', 'purchases', 'views', 'interaction_count']
+        if all(col in df.columns for col in required_cols):
+            df['demand_score_raw'] = (
+                0.4 * df['quantity_sold'] +
+                0.3 * df['purchases'] +
+                0.2 * df['views'] +
+                0.1 * df['interaction_count']
+            ).round(6)
+        else:
+            missing_cols = set(required_cols) - set(df.columns)
+            raise ValueError(f"Missing required columns for demand_score_raw: {', '.join(missing_cols)}")
+        
+        # Calculate interest_score
+        df['interest_score'] = (
+            df['purchases'] * 0.5 +
+            df['views'] * 0.3 +
+            df['interaction_count'] * 0.2
+        ) * df.apply(lambda row: 2.0 if row['buyer_location'] == row['farmer_location'] else 1.0, axis=1)
+        
+        logger.info(f"Loaded data from {csv_path} with shape {df.shape}")
+        return df
+    except FileNotFoundError:
+        logger.error(f"CSV file not found at {csv_path}")
+        raise ValueError(f"CSV file not found at {csv_path}")
+    except Exception as e:
+        logger.error(f"Error loading data from {csv_path}: {str(e)}")
+        raise ValueError(f"Error loading data from {csv_path}: {str(e)}")
 
-def load_recommendation_model(model_path='Agri_Link/svd_recommendation_model.pkl'):
+def load_recommendation_model(model_path=DATA_DIR / 'svd_recommendation_model.pkl'):
     try:
         model_data = joblib.load(model_path)
-        print(f"Debug: Loaded model_data keys: {list(model_data.keys())}")  # Debug
+        logger.info(f"Loaded model_data keys: {list(model_data.keys())}")
         U, sigma, Vt = model_data['U'], model_data['sigma'], model_data['Vt']
         buyer_ids = model_data['buyer_ids']
         product_keys = model_data['product_names']
         predicted_affinity = np.dot(np.dot(U, sigma), Vt)
         affinity_df = pd.DataFrame(predicted_affinity, index=buyer_ids, columns=product_keys)
-        print(f"Debug: Returning affinity_df shape: {affinity_df.shape}, buyer_ids len: {len(buyer_ids)}, product_keys len: {len(product_keys)}")  # Debug
-        return affinity_df, buyer_ids, product_keys  # Ensure three values are returned
+        logger.info(f"Returning affinity_df shape: {affinity_df.shape}, buyer_ids len: {len(buyer_ids)}, product_keys len: {len(product_keys)}")
+        return affinity_df, buyer_ids, product_keys
+    except FileNotFoundError:
+        logger.error(f"Model file not found at {model_path}")
+        raise ValueError(f"Model file not found at {model_path}")
     except Exception as e:
-        raise ValueError(f"Error loading model: {str(e)}")
+        logger.error(f"Error loading model from {model_path}: {str(e)}")
+        raise ValueError(f"Error loading model from {model_path}: {str(e)}")
 
 def get_avg_demand(product_name, df, farmer_id=None):
     if farmer_id:
@@ -90,20 +109,15 @@ def get_avg_demand(product_name, df, farmer_id=None):
         return 'moderate'
     else:
         return 'high'
-    
+
 def recommend_buyers_for_farmer_product(farmer_id, product_name, affinity_df, df, threshold=0.01):
-    """
-    Recommend all buyers interested in a product's general_name, regardless of farmer.
-    """
     try:
-        # Match product_name to general_name
         product_name = preprocess_text(product_name)
         general_names = df['general_name'].unique()
         match = process.extractOne(product_name, general_names, scorer=fuzz.partial_ratio)
         general_name = match[0] if match and match[1] >= 80 else product_name
         logger.info(f"Matched {product_name} to general_name: {general_name}")
 
-        # Find all products with this general_name
         matching_products = df[df['general_name'] == general_name][['farmer_id', 'product_name']].drop_duplicates()
         matching_columns = [
             (row['farmer_id'], row['product_name'])
@@ -115,14 +129,13 @@ def recommend_buyers_for_farmer_product(farmer_id, product_name, affinity_df, df
             logger.warning(f"No matching products found for general_name: {general_name}")
             return []
 
-        # Aggregate affinity scores across all matching products
         product_scores = affinity_df[matching_columns]
-        buyer_scores = product_scores.mean(axis=1)  # Average across all farmers' products
+        buyer_scores = product_scores.mean(axis=1)
         interested_buyers = buyer_scores[buyer_scores > threshold].sort_values(ascending=False)
         buyer_ids = interested_buyers.index.tolist()
         
         logger.info(f"Buyers interested in {general_name}: {buyer_ids}")
-        return buyer_ids  # Return list of buyer IDs
+        return buyer_ids
     except Exception as e:
         logger.error(f"Error in recommend_buyers_for_farmer_product: {str(e)}")
         raise
@@ -184,7 +197,7 @@ def recommend_products_for_buyer(buyer_id, affinity_df, df, top_n=3, threshold=0
     try:
         for idx, score in buyer_scores.items():
             logger.info(f"Processing index: {idx}, score: {score}")
-            farmer_id, product_name = idx  # Explicit unpacking
+            farmer_id, product_name = idx
             general_name = df[(df['farmer_id'] == farmer_id) & (df['product_name'] == product_name)]['general_name'].iloc[0]
             general_scores[general_name] = general_scores.get(general_name, 0) + max(score, 0)
     except ValueError as e:

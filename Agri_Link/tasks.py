@@ -8,14 +8,22 @@ from fuzzywuzzy import fuzz, process
 from django_pandas.io import read_frame
 from sklearn.preprocessing import MinMaxScaler
 from Agri_Link.models import Crop, PaymentDetails, UserInteractionLog, Order, UserAddress, Profile
+from pathlib import Path
 
 import logging
 
 logger = logging.getLogger(__name__)
 
+# Define base directory (project root)
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / 'data'  # Directory for CSV and model files
+
+# Ensure data directory exists
+DATA_DIR.mkdir(exist_ok=True)
+
 @shared_task
 def export_data():
-    file_path = r'C:/Users/HP/Desktop/Datasets/agrilink_data.csv'
+    file_path = DATA_DIR / 'agrilink_data.csv'
 
     # Fetch crop data
     crops = Crop.objects.all()
@@ -116,8 +124,8 @@ def export_data():
         0.3 * df['purchases'] +
         0.2 * df['views'] +
         0.1 * df['interaction_count']
-    ).round(6)  # Store raw demand score
-    df['demand_score'] = df['demand_score_raw']  # Will be normalized later in train_recommendation_model
+    ).round(6)
+    df['demand_score'] = df['demand_score_raw']
 
     # Define output columns
     output_cols = ['id', 'farmer_id', 'product_name', 'price_per_unit', 'unit', 'availability', 
@@ -127,12 +135,14 @@ def export_data():
 
     # Save to CSV
     df[output_cols].to_csv(file_path, index=False)
-    print(f"Exported data to {file_path} with {len(df)} rows")
+    logger.info(f"Exported data to {file_path} with {len(df)} rows")
+    return f"Exported data to {file_path}"
 
 @shared_task
 def train_recommendation_model():
     try:
-        csv_path = 'C:/Users/HP/Desktop/Datasets/agrilink_data.csv'
+        csv_path = DATA_DIR / 'agrilink_data.csv'
+        model_path = DATA_DIR / 'svd_recommendation_model.pkl'
         logger.info(f"Loading data from {csv_path}")
         df = pd.read_csv(csv_path)
         if df.empty:
@@ -140,7 +150,7 @@ def train_recommendation_model():
             return "No data to train on"
 
         df.fillna(0, inplace=True)
-        logger.info(f"CSV columns: {df.columns.tolist()}")  # Debug columns
+        logger.info(f"CSV columns: {df.columns.tolist()}")
 
         # Engineer demand_score_raw
         required_cols = ['quantity_sold', 'purchases', 'views', 'interaction_count']
@@ -210,7 +220,7 @@ def train_recommendation_model():
         # Build matrix with farmer_id, product_name tuples
         buyer_product = df.pivot_table(
             index='buyer_id',
-            columns=['farmer_id', 'product_name'],  # Use tuples for compatibility
+            columns=['farmer_id', 'product_name'],
             values='interest_score',
             fill_value=0
         )
@@ -237,17 +247,16 @@ def train_recommendation_model():
             'sigma': sigma,
             'Vt': Vt,
             'buyer_ids': buyer_product.index.tolist(),
-            'product_names': buyer_product.columns.tolist()  # Tuples now
+            'product_names': buyer_product.columns.tolist()
         }
-        joblib.dump(model_data, 'Agri_Link/svd_recommendation_model.pkl')
-        logger.info("Model trained and saved")
+        joblib.dump(model_data, model_path)
+        logger.info(f"Model trained and saved to {model_path}")
 
         # Verify saved model
-        loaded_data = joblib.load('Agri_Link/svd_recommendation_model.pkl')
+        loaded_data = joblib.load(model_path)
         logger.info(f"Saved product names (first 5): {loaded_data['product_names'][:5]}")
 
         return "Training completed successfully"
     except Exception as e:
         logger.error(f"Error in train_recommendation_model: {str(e)}")
         raise
-
