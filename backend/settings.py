@@ -14,7 +14,6 @@ import cloudinary
 import cloudinary.uploader
 import cloudinary.api
 
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -27,14 +26,14 @@ FIREBASE_APP = firebase_admin.initialize_app(cred)
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
-#SECRET_KEY = 'django-insecure-q0m=8zvj=y4hsi+we3s^o57&tad46fxoo(ody6i0d(h&wq^m6#'
+SECRET_KEY = 'django-insecure-q0m=8zvj=y4hsi+we3s^o57&tad46fxoo(ody6i0d(h&wq^m6#'
 
-SECRET_KEY = os.environ.get("SECRET_KEY")
+#SECRET_KEY = os.environ.get("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-#DEBUG = True
+DEBUG = True
 
-DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+#DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = [
     'agrilink-backend-hjzl.onrender.com',
@@ -58,13 +57,17 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "debug_toolbar",
     "corsheaders",
-    "Agri_Link",
+    # "Agri_Link",
 
     'rest_framework_simplejwt',
     'rest_framework',
     "fcm_django",
     'cloudinary_storage',
     'cloudinary',
+
+    'Agri_Link.apps.AgriLinkConfig',
+    'django_celery_beat',
+    'django_celery_results'
 ]
 
 # fcm push notifications
@@ -253,10 +256,20 @@ cloudinary.config(
 
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
+# Celery Configuration
+CELERY_BROKER_URL = 'sqla+postgresql://agrilink_database_8zg4_user:GOpcP4im7aeTukPiJQvRbkLbZA5u5uxD@dpg-cus5v6gfnakc73evpul0-a.oregon-postgres.render.com:5432/agrilink_database_8zg4'
+CELERY_RESULT_BACKEND = 'db+postgresql://agrilink_database_8zg4_user:GOpcP4im7aeTukPiJQvRbkLbZA5u5uxD@dpg-cus5v6gfnakc73evpul0-a.oregon-postgres.render.com:5432/agrilink_database_8zg4'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True  # Silence warning
+
 # Email settings
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'  # or your email provider
 EMAIL_PORT = 587  # or 465 for SSL
 EMAIL_USE_TLS = True  # or False for SSL
-EMAIL_HOST_USER = 'sengendomark16@gmail.com'
-EMAIL_HOST_PASSWORD = 'xttx qvva wshk lmig'
+EMAIL_HOST_USER = 'agrilink143@gmail.com'
+EMAIL_HOST_PASSWORD = 'mmxj qbjf xpxn ceez'

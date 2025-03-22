@@ -309,4 +309,11 @@ class UserInteractionLog(models.Model):
     monthly_stats = models.JSONField(default=list)
     timestamp = models.DateTimeField(auto_now_add=True)
 
+#email Initiation
+class EmailIntiation(models.Model):
+    user = models.ManyToManyField(User)
+    selected = models.BooleanField(default=False)
+    farm_name = models.CharField(max_length=100)
+    message = models.CharField(max_length=255)
+
     

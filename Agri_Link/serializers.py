@@ -411,6 +411,12 @@ class UserInteractionLogSerializer(serializers.ModelSerializer):
         model = UserInteractionLog
         fields = ['id', 'crop', 'action',  'monthly_stats', 'timestamp']
 
+#Email serializer
+class EmailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmailIntiation
+        fields = '__all__'
+
 # =================================================================== #
 #Payment Options
 class PaymentMethodSerializer(serializers.ModelSerializer):

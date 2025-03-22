@@ -8,6 +8,7 @@ urlpatterns = [
     path('single_user/<int:pk>', SingleUser.as_view()),
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('all_farmers', AllFarmers.as_view()),
+    path('buyers', BuyerProfiles.as_view()),
 
     # registration urls
     path('buyer_register', BuyerRegistrationView.as_view()),
@@ -111,6 +112,13 @@ urlpatterns = [
     path("post_delivery_options", PostDeliveryOptions.as_view()),
     path('delivery_list/<int:user_id>', ListDeliveryOptions),
     path('edit_delivery/<int:pk>', UpdateDeliveryOption.as_view()),
+
+    #recommender paths
+    path('recommendations/farmer/<int:farmer_id>/', FarmerRecommendationView.as_view(), name='farmer_recommendations'),
+    path('recommendations/buyer/<int:buyer_id>/', BuyerRecommendationView.as_view(), name='buyer_recommendations'),
+
+    #send emails
+    path('send_emails', SendEmails.as_view()),
 
     #flutter wave url
     # path('initiate-mobile-money-payment/', initiate_mobile_money_payment, name='initiate_mobile_money_payment'),

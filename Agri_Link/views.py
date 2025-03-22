@@ -36,6 +36,14 @@ import user_agents
 from datetime import timedelta, datetime
 from collections import defaultdict
 from django.utils import timezone
+from fuzzywuzzy import fuzz
+import pandas as pd
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+from .recommendation_utils import load_recommendation_model, recommend_buyers_for_farmer_product, recommend_products_for_buyer, get_data, Interested_buyers_for_farmer_product
 
 # Create your views here.
 class ObtainaPairView(TokenObtainPairView):
@@ -240,6 +248,12 @@ def UserProfile(request, user_id):
         serializer = UserProfileSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+#buyer profiles
+class BuyerProfiles(generics.ListAPIView):
+    queryset = User.objects.filter(is_buyer=True)
+    serializer_class = UserSerializer
+    pagination_class = None
+
 @api_view(['GET'])
 def SingleProfile(request, user_id):
     try:
@@ -284,7 +298,64 @@ class ListCrops(generics.ListAPIView):
 class PostCrops(generics.ListCreateAPIView):
     queryset = Crop.objects.prefetch_related('ratings', 'crop_review')
     serializer_class = CropSerializer
-    parser_classes = [MultiPartParser, FormParser]  # Add these parsers
+    parser_classes = [MultiPartParser, FormParser]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        crop = serializer.save()
+
+        farmer = crop.user
+        farmer_profile = Profile.objects.get(user=farmer)
+        farmer_location = farmer_profile.location or "Unknown"
+        farm_name = farmer_profile.farmName or "Unnamed Farm"
+        upload_time = timezone.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        try:
+            affinity_df, buyer_ids, product_keys = load_recommendation_model()
+            df = get_data()
+        except Exception as e:
+            logger.error(f"Failed to load recommendation model: {str(e)}")
+            return Response({"error": "Failed to load recommendation system"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        product_name = crop.crop_name
+        try:
+            recommended_buyers = recommend_buyers_for_farmer_product(farmer.id, product_name, affinity_df, df, threshold=0.01)
+            logger.info(f"Recommended buyers for {product_name}: {recommended_buyers}")
+        except Exception as e:
+            logger.error(f"Error recommending buyers: {str(e)}")
+            return Response({"error": "Failed to get buyer recommendations"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        if recommended_buyers:
+            for buyer_id in recommended_buyers:
+                try:
+                    buyer = User.objects.get(id=buyer_id, is_buyer=True)
+                    buyer_name = buyer.get_full_name
+                    buyer_email = buyer.email
+
+                    subject = f"New Product Available: {crop.crop_name}"
+                    message = (
+                        f"Dear {buyer_name},\n\n"
+                        f"A product you might be interested in, '{crop.crop_name}', has been uploaded!\n"
+                        f"Details:\n"
+                        f"- Farmer Location: {farmer_location}\n"
+                        f"- Farm Name: {farm_name}\n"
+                        f"- Uploaded At: {upload_time}\n\n"
+                        f"Check it out on AgriLink!\n\n"
+                        f"Best regards,\nAgriLink Team"
+                    )
+                    from_email = settings.EMAIL_HOST_USER
+                    send_mail(subject, message, from_email, [buyer_email], fail_silently=False)
+                    logger.info(f"Email sent to {buyer_name} ({buyer_email}) for {crop.crop_name}")
+                except User.DoesNotExist:
+                    logger.warning(f"Buyer ID {buyer_id} not found")
+                except Exception as e:
+                    logger.error(f"Failed to send email to buyer {buyer_id}: {str(e)}")
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
 
 #pagination
 
@@ -1476,3 +1547,88 @@ def monthly_sales_trends_by_crop(request, farmer_id):
         return Response({"error": "Farmer not found"}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+    
+#=======================================================system recommendations================================================#
+
+class FarmerRecommendationView(APIView):
+    def get(self, request, farmer_id=None):
+        try:
+            affinity_df, buyer_ids, product_keys = load_recommendation_model()
+            df = get_data()
+            
+            if not isinstance(df, pd.DataFrame):
+                return Response({'error': 'Data loading failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            if not isinstance(affinity_df, pd.DataFrame):
+                return Response({'error': 'Affinity data loading failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            if not farmer_id:
+                return Response({'error': 'Farmer ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            farmer_id = int(farmer_id)
+            if farmer_id not in df['farmer_id'].unique():
+                return Response({'error': f'Farmer {farmer_id} not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            recommendations = Interested_buyers_for_farmer_product(farmer_id, affinity_df, df)
+            return Response(recommendations, status=status.HTTP_200_OK)
+         
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class BuyerRecommendationView(APIView):
+    def get(self, request, buyer_id=None):
+        try:
+            logger.info(f"Processing request for buyer_id: {buyer_id}")
+            affinity_df, buyer_ids, product_keys = load_recommendation_model()
+            logger.info(f"Loaded model with {len(buyer_ids)} buyers and {len(product_keys)} products")
+            df = get_data()
+            
+            if not buyer_id:
+                logger.warning("No buyer_id provided")
+                return Response({'error': 'Buyer ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            buyer_id = int(buyer_id)
+            logger.info(f"Buyer ID: {buyer_id}")
+            if buyer_id not in df['buyer_id'].unique():
+                logger.warning(f"Buyer {buyer_id} not found in data")
+                return Response({'error': f'Buyer {buyer_id} not found'}, status=status.HTTP_404_NOT_FOUND)
+            
+            recommendation = recommend_products_for_buyer(buyer_id, affinity_df, df)
+            logger.info(f"Generated recommendation for Buyer {buyer_id}: {recommendation}")
+            return Response({f"Buyer {buyer_id}": recommendation}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.error(f"Error in BuyerRecommendationView: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+#===============================send emails =================================================================
+class SendEmails(generics.CreateAPIView):
+    queryset = EmailIntiation.objects.all()
+    serializer_class = EmailSerializer
+
+    def get(self, request, *args, **kwargs):
+        return Response({"detail": "Send a POST request to send emails."}, status=status.HTTP_200_OK)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        msg = serializer.save()
+
+        selectedUsers = msg.user.all()
+        for user in selectedUsers:
+            try:
+                buyer = User.objects.get(id=user.id)
+                buyer_email = buyer.email
+
+                subject = f"Message from: {msg.farm_name}"
+                from_email = settings.EMAIL_HOST_USER
+                send_mail(subject, msg.message, from_email, [buyer_email], fail_silently=False)
+                logger.info(f"Email sent to {buyer.get_full_name()} ({buyer_email})")
+            except User.DoesNotExist:
+                logger.warning(f"Buyer ID {user.id} not found")
+            except Exception as e:
+                logger.error(f"Failed to send email to buyer {user.id}: {str(e)}")
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    
+
