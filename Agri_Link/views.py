@@ -1618,10 +1618,16 @@ class SendEmails(generics.CreateAPIView):
             try:
                 buyer = User.objects.get(id=user.id)
                 buyer_email = buyer.email
+                message = (
+                        f"Dear {buyer.get_full_name},\n\n"
+                        f"{msg.message}"
+                        f"Check it out on AgriLink!\n\n"
+                        f"Best regards,\nAgriLink Team"
+                    )
 
                 subject = f"Message from: {msg.farm_name}"
                 from_email = settings.EMAIL_HOST_USER
-                send_mail(subject, msg.message, from_email, [buyer_email], fail_silently=False)
+                send_mail(subject, message, from_email, [buyer_email], fail_silently=False)
                 logger.info(f"Email sent to {buyer.get_full_name()} ({buyer_email})")
             except User.DoesNotExist:
                 logger.warning(f"Buyer ID {user.id} not found")
