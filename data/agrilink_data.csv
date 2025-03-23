@@ -1,8 +1,12 @@
 id,farmer_id,product_name,price_per_unit,unit,availability,quantity_sold,buyer_id,buyer_location,farmer_location,views,purchases,interaction_count,highest_purchase_month,timestamp,demand_score,demand_score_raw
-1,6,Pigs,80000,Livestock,41,0,2,Bukomansimbi,Buikwe,3.0,2.0,5.0,3,2025-03-23 16:59:39.987306+00:00,1.7,1.7
-2,7,Mango,1500,Produce,2000,0,None,Unknown,Wakiso,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
-3,7,Maize,1200,Produce,3497,0,None,Unknown,Wakiso,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
-4,7,Matooke,35000,Cluster,2000,0,None,Unknown,Wakiso,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
-5,7,Off Layers,25000,Poultry,1570,0,None,Unknown,Wakiso,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
-6,7,Sorghum,12000,Bag/Sack,120,0,None,Unknown,Wakiso,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
-7,7,Irish Potatoes,270000,Bag/Sack,1200,0,None,Unknown,Wakiso,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
+2,7,Mango,1500,Produce,2000,0.0,2,Bukomansimbi,Wakiso,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
+3,7,Maize,1200,Produce,3497,0.0,4,Buvuma,Wakiso,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
+4,7,Matooke,35000,Cluster,2000,0.0,4,Buvuma,Wakiso,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
+6,7,Sorghum,12000,Bag/Sack,120,0.0,4,Buvuma,Wakiso,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
+7,7,Irish Potatoes,270000,Bag/Sack,1200,0.0,4,Buvuma,Wakiso,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
+5,7,Off Layers,25000,Poultry,1563,3.0,4,Buvuma,Wakiso,2.0,2.0,4.0,3,2025-03-23 18:16:02.427314+00:00,2.6,2.6
+8,12,Broilers,12000,Poultry,9997,0.0,2,Bukomansimbi,Mukono,1.0,1.0,2.0,3,2025-03-23 18:31:16.685393+00:00,0.7,0.7
+1,6,Pigs,80000,Livestock,30,0.0,None,Unknown,Buikwe,6.0,5.0,11.0,3,2025-03-23 18:45:43.832367+00:00,3.8,3.8
+9,6,Tomatoes,50000,Box,50,0.0,None,Unknown,Buikwe,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
+10,6,Apples,3000,Produce,50,0.0,None,Unknown,Buikwe,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
+11,8,Broilers,15000,Poultry,20000,0.0,None,Unknown,Wakiso,0.0,0.0,0.0,0,2025-01-01 00:00:00+00:00,0.0,0.0
