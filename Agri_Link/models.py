@@ -189,6 +189,7 @@ class Order(models.Model):
 #the ordered crops
 class OrderCrop(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='OrderCrop')
+    crop = models.ForeignKey(Crop, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()
     weights = models.JSONField(default=list, blank=True, null=True)  
     price_per_unit = models.PositiveIntegerField() 
