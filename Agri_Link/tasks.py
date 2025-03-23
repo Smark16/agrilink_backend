@@ -29,82 +29,33 @@ def export_data():
     crops = Crop.objects.all()
     df = read_frame(crops, fieldnames=['id', 'user__id', 'crop_name', 'price_per_unit', 'unit', 'availability'])
     df = df.rename(columns={'user__id': 'farmer_id', 'crop_name': 'product_name'})
-    logger.info(f"Fetched {len(crops)} crops")
 
-    # Fetch orders and related order details
-    orders = Order.objects.select_related('user', 'address').prefetch_related('order_detail__crop')
-    order_data = []
-    for order in orders:
-        buyer_id = order.user.id
-        order_details = order.order_detail.all()
-        logger.debug(f"Order {order.id} by buyer {buyer_id} has {len(order_details)} details")
-        for detail in order_details:
-            order_crops = detail.crop.all()
-            logger.debug(f"Order detail has {len(order_crops)} OrderCrop entries")
-            for order_crop in order_crops:
-                matching_crop = Crop.objects.filter(crop_name=order_crop.crop_name, user=order_crop.user).first()
-                crop_id = matching_crop.id if matching_crop else None
-                if crop_id:
-                    order_data.append({
-                        'buyer_id': buyer_id,
-                        'crop_id': crop_id,
-                        'quantity': order_crop.quantity,
-                        'timestamp': order.created_at
-                    })
-                else:
-                    logger.warning(f"No matching Crop found for OrderCrop: {order_crop.crop_name} by user {order_crop.user.id}")
-
-    # Supplement with PaymentDetails
-    payments = PaymentDetails.objects.filter(status='successful').select_related('order__user', 'order__address')
-    logger.info(f"Fetched {len(payments)} successful payments")
+    # Fetch successful payments and calculate quantity sold
+    payments = PaymentDetails.objects.filter(status='successful')
+    quantity_sold_dict = {}
     for payment in payments:
-        buyer_id = payment.order.user.id
-        if payment.quantity:
-            for item in payment.quantity:
-                order_data.append({
-                    'buyer_id': buyer_id,
-                    'crop_id': item['id'],
-                    'quantity': item['quantity'],
-                    'timestamp': payment.created_at
-                })
-        for crop in payment.crop.all():
-            order_data.append({
-                'buyer_id': buyer_id,
-                'crop_id': crop.id,
-                'quantity': 1,
-                'timestamp': payment.created_at
-            })
+        for quantity_item in payment.quantity:
+            crop_id = quantity_item['id']
+            quantity = quantity_item['quantity']
+            quantity_sold_dict[crop_id] = quantity_sold_dict.get(crop_id, 0) + quantity
 
-    order_df = pd.DataFrame(order_data)
-    logger.info(f"Collected {len(order_df)} order/purchase entries")
-
-    # Aggregate quantity_sold
-    if not order_df.empty:
-        quantity_sold_df = order_df.groupby('crop_id')['quantity'].sum().reset_index()
-        quantity_sold_df = quantity_sold_df.rename(columns={'quantity': 'quantity_sold'})
-        df = df.merge(quantity_sold_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
-    else:
-        df['quantity_sold'] = 0
+    quantity_sold_df = pd.DataFrame(list(quantity_sold_dict.items()), columns=['crop_id', 'quantity_sold'])
+    df = df.merge(quantity_sold_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
     df['quantity_sold'] = df['quantity_sold'].fillna(0)
 
-    # Assign buyer_id with nullable integers
-    if not order_df.empty:
-        latest_order_per_crop = order_df.loc[order_df.groupby('crop_id')['timestamp'].idxmax()]
-        buyer_mapping = latest_order_per_crop[['crop_id', 'buyer_id']].set_index('crop_id')['buyer_id']
-        df['buyer_id'] = df['id'].map(buyer_mapping)  # Leave as NaN for unmapped
-    else:
-        df['buyer_id'] = pd.NA
-    df['buyer_id'] = df['buyer_id'].astype('Int64')  # Nullable integer type
+    # Fetch orders for buyer_id
+    orders = Order.objects.all()
+    order_df = read_frame(orders, fieldnames=['user__id', 'address'])
+    df['buyer_id'] = order_df['user__id'].reindex(df.index, fill_value='None')
 
-    # Fetch buyer locations
+    # Fetch address for buyers
     address = UserAddress.objects.all()
     add_df = read_frame(address, fieldnames=['user__id', 'district'])
     add_df = add_df.rename(columns={'user__id': 'buyer_id', 'district': 'buyer_location'})
-    add_df['buyer_id'] = add_df['buyer_id'].astype('Int64')  # Match df['buyer_id'] type
     df = df.merge(add_df[['buyer_id', 'buyer_location']], on='buyer_id', how='left')
     df['buyer_location'] = df['buyer_location'].fillna('Unknown')
 
-    # Fetch farmer locations
+    # Fetch profile for farmers
     profile = Profile.objects.filter(is_farmer=True)
     prof_df = read_frame(profile, fieldnames=['user__id', 'location'])
     prof_df = prof_df.rename(columns={'user__id': 'farmer_id', 'location': 'farmer_location'})
@@ -117,29 +68,47 @@ def export_data():
     log_df = log_df.rename(columns={'crop__id': 'crop_id'})
     log_df = log_df.dropna(subset=['crop_id'])
     log_df['crop_id'] = pd.to_numeric(log_df['crop_id'], errors='coerce').astype('int64')
+
+    # Sort by timestamp for latest log
     log_df['timestamp'] = pd.to_datetime(log_df['timestamp'], utc=True)
+    latest_logs = log_df.loc[log_df.groupby('crop_id')['timestamp'].idxmax()]
 
-    # Calculate views, purchases, and interaction_count
-    views_df = log_df[log_df['action'] == 'view'].groupby('crop_id').size().reset_index(name='views')
-    purchases_df = log_df[log_df['action'] == 'purchase'].groupby('crop_id').size().reset_index(name='purchases')
-    interaction_count_df = log_df.groupby('crop_id').size().reset_index(name='interaction_count')
+    # Calculate metrics
+    views_list = []
+    purchases_list = []
+    interaction_count_list = []
+    month_list = []
 
-    # Merge interaction data
+    for _, log in latest_logs.iterrows():
+        crop_id = log['crop_id']
+        monthly_stats = log['monthly_stats']
+        total_views = sum(month['views'] for month in monthly_stats)
+        total_purchases = sum(month['purchases'] for month in monthly_stats)
+        highest_purchase_month = max(monthly_stats, key=lambda m: m['purchases'], default={'month': 0})['month']
+
+        views_list.append({'crop_id': crop_id, 'views': total_views})
+        purchases_list.append({'crop_id': crop_id, 'purchases': total_purchases})
+        interaction_count_list.append({'crop_id': crop_id, 'interaction_count': logs.filter(crop__id=crop_id).count()})
+        month_list.append({'crop_id': crop_id, 'highest_purchase_month': highest_purchase_month})
+
+    views_df = pd.DataFrame(views_list)
+    purchases_df = pd.DataFrame(purchases_list)
+    interaction_count_df = pd.DataFrame(interaction_count_list)
+    month_df = pd.DataFrame(month_list)
+
+    for temp_df in [views_df, purchases_df, interaction_count_df, month_df]:
+        temp_df['crop_id'] = pd.to_numeric(temp_df['crop_id'], errors='coerce').astype('int64')
+
+    # Merge into main DataFrame
     df = df.merge(views_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
     df = df.merge(purchases_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
     df = df.merge(interaction_count_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
-
-    # Get latest timestamp and highest purchase month
-    latest_logs = log_df.loc[log_df.groupby('crop_id')['timestamp'].idxmax()]
-    timestamp_df = latest_logs[['crop_id', 'timestamp']]
-    month_df = latest_logs.apply(
-        lambda row: pd.Series({
-            'crop_id': row['crop_id'],
-            'highest_purchase_month': max(row['monthly_stats'], key=lambda m: m['purchases'], default={'month': 0})['month']
-        }), axis=1
-    )
-    df = df.merge(timestamp_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
     df = df.merge(month_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
+
+    # Add timestamp
+    timestamp_df = latest_logs[['crop_id', 'timestamp']].copy()
+    timestamp_df['crop_id'] = pd.to_numeric(timestamp_df['crop_id'], errors='coerce').astype('int64')
+    df = df.merge(timestamp_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
 
     # Fill NaN values
     df['views'] = df['views'].fillna(0)
@@ -147,8 +116,9 @@ def export_data():
     df['interaction_count'] = df['interaction_count'].fillna(0)
     df['highest_purchase_month'] = df['highest_purchase_month'].fillna(0).astype(int)
     df['timestamp'] = df['timestamp'].fillna(pd.Timestamp('2025-01-01 00:00:00', tz='UTC'))
+    df['buyer_id'] = df['buyer_id'].fillna('None')
 
-    # Calculate demand score
+    # Calculate demand score and preserve raw value
     df['demand_score_raw'] = (
         0.4 * df['quantity_sold'] +
         0.3 * df['purchases'] +
@@ -261,12 +231,18 @@ def train_recommendation_model():
         logger.info(f"Buyer-product matrix shape: {buyer_product.shape}, columns sample: {buyer_product.columns[:5].tolist()}")
 
         buyer_product_sparse = csr_matrix(buyer_product.values)
+        n_buyers, n_products = buyer_product_sparse.shape
+        logger.info(f"Matrix dimensions: {n_buyers} buyers, {n_products} products")
 
-        # Dynamic n_factors
-        n_buyers = buyer_product.shape[0]
-        n_products = buyer_product.shape[1]
-        n_factors = max(2, min(10, int(min(n_buyers, n_products) / 2)))
-        logger.info(f"Using {n_factors} factors for SVD")
+        # Check if matrix is too small for SVD
+        min_dim = min(n_buyers, n_products)
+        if min_dim <= 1:
+            logger.warning(f"Matrix too small for SVD: {n_buyers}x{n_products}")
+            return f"Insufficient data for SVD: Matrix size {n_buyers}x{n_products}"
+
+        # Dynamically set n_factors ensuring 0 < k < min_dim
+        n_factors = max(1, min(10, min_dim - 1))  # Ensure k is at least 1 and less than min_dim
+        logger.info(f"Using {n_factors} factors for SVD (min_dim: {min_dim})")
 
         # Train SVD
         U, sigma, Vt = svds(buyer_product_sparse, k=n_factors)
