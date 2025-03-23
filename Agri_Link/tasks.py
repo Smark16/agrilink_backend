@@ -7,7 +7,7 @@ import joblib
 from fuzzywuzzy import fuzz, process
 from django_pandas.io import read_frame
 from sklearn.preprocessing import MinMaxScaler
-from Agri_Link.models import Crop, PaymentDetails, UserInteractionLog, Order, UserAddress, Profile
+from Agri_Link.models import Crop, PaymentDetails, UserInteractionLog, Order, OrderDetail, OrderCrop, UserAddress, Profile
 from pathlib import Path
 
 import logging
@@ -29,36 +29,78 @@ def export_data():
     crops = Crop.objects.all()
     df = read_frame(crops, fieldnames=['id', 'user__id', 'crop_name', 'price_per_unit', 'unit', 'availability'])
     df = df.rename(columns={'user__id': 'farmer_id', 'crop_name': 'product_name'})
+    logger.info(f"Fetched {len(crops)} crops")
 
-    # Fetch orders and calculate purchases per crop
-    orders = Order.objects.select_related('user', 'address').prefetch_related('orderitem_set__crop')
+    # Fetch orders and related order details
+    orders = Order.objects.select_related('user', 'address').prefetch_related('order_detail__crop')
     order_data = []
     for order in orders:
         buyer_id = order.user.id
-        for item in order.orderitem_set.all():  # Assuming Order has OrderItem with crop and quantity
+        order_details = order.order_detail.all()
+        logger.debug(f"Order {order.id} by buyer {buyer_id} has {len(order_details)} details")
+        for detail in order_details:
+            order_crops = detail.crop.all()
+            logger.debug(f"Order detail has {len(order_crops)} OrderCrop entries")
+            for order_crop in order_crops:
+                matching_crop = Crop.objects.filter(crop_name=order_crop.crop_name, user=order_crop.user).first()
+                crop_id = matching_crop.id if matching_crop else None
+                if crop_id:
+                    order_data.append({
+                        'buyer_id': buyer_id,
+                        'crop_id': crop_id,
+                        'quantity': order_crop.quantity,
+                        'timestamp': order.created_at
+                    })
+                else:
+                    logger.warning(f"No matching Crop found for OrderCrop: {order_crop.crop_name} by user {order_crop.user.id}")
+
+    # Supplement with PaymentDetails
+    payments = PaymentDetails.objects.filter(status='successful').select_related('order__user', 'order__address')
+    logger.info(f"Fetched {len(payments)} successful payments")
+    for payment in payments:
+        buyer_id = payment.order.user.id
+        if payment.quantity:
+            for item in payment.quantity:
+                order_data.append({
+                    'buyer_id': buyer_id,
+                    'crop_id': item['id'],
+                    'quantity': item['quantity'],
+                    'timestamp': payment.created_at
+                })
+        for crop in payment.crop.all():
             order_data.append({
                 'buyer_id': buyer_id,
-                'crop_id': item.crop.id,
-                'quantity': item.quantity,
-                'timestamp': order.created_at
+                'crop_id': crop.id,
+                'quantity': 1,
+                'timestamp': payment.created_at
             })
-    order_df = pd.DataFrame(order_data)
 
-    # Aggregate quantity_sold from orders
-    quantity_sold_df = order_df.groupby('crop_id')['quantity'].sum().reset_index()
-    quantity_sold_df = quantity_sold_df.rename(columns={'quantity': 'quantity_sold'})
-    df = df.merge(quantity_sold_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
+    order_df = pd.DataFrame(order_data)
+    logger.info(f"Collected {len(order_df)} order/purchase entries")
+
+    # Aggregate quantity_sold
+    if not order_df.empty:
+        quantity_sold_df = order_df.groupby('crop_id')['quantity'].sum().reset_index()
+        quantity_sold_df = quantity_sold_df.rename(columns={'quantity': 'quantity_sold'})
+        df = df.merge(quantity_sold_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
+    else:
+        df['quantity_sold'] = 0
     df['quantity_sold'] = df['quantity_sold'].fillna(0)
 
-    # Assign buyer_id per crop based on most recent order
-    latest_order_per_crop = order_df.loc[order_df.groupby('crop_id')['timestamp'].idxmax()]
-    buyer_mapping = latest_order_per_crop[['crop_id', 'buyer_id']].set_index('crop_id')['buyer_id']
-    df['buyer_id'] = df['id'].map(buyer_mapping).fillna('None')
+    # Assign buyer_id with nullable integers
+    if not order_df.empty:
+        latest_order_per_crop = order_df.loc[order_df.groupby('crop_id')['timestamp'].idxmax()]
+        buyer_mapping = latest_order_per_crop[['crop_id', 'buyer_id']].set_index('crop_id')['buyer_id']
+        df['buyer_id'] = df['id'].map(buyer_mapping)  # Leave as NaN for unmapped
+    else:
+        df['buyer_id'] = pd.NA
+    df['buyer_id'] = df['buyer_id'].astype('Int64')  # Nullable integer type
 
     # Fetch buyer locations
     address = UserAddress.objects.all()
     add_df = read_frame(address, fieldnames=['user__id', 'district'])
     add_df = add_df.rename(columns={'user__id': 'buyer_id', 'district': 'buyer_location'})
+    add_df['buyer_id'] = add_df['buyer_id'].astype('Int64')  # Match df['buyer_id'] type
     df = df.merge(add_df[['buyer_id', 'buyer_location']], on='buyer_id', how='left')
     df['buyer_location'] = df['buyer_location'].fillna('Unknown')
 
@@ -77,7 +119,7 @@ def export_data():
     log_df['crop_id'] = pd.to_numeric(log_df['crop_id'], errors='coerce').astype('int64')
     log_df['timestamp'] = pd.to_datetime(log_df['timestamp'], utc=True)
 
-    # Calculate views, purchases, and interaction_count from logs
+    # Calculate views, purchases, and interaction_count
     views_df = log_df[log_df['action'] == 'view'].groupby('crop_id').size().reset_index(name='views')
     purchases_df = log_df[log_df['action'] == 'purchase'].groupby('crop_id').size().reset_index(name='purchases')
     interaction_count_df = log_df.groupby('crop_id').size().reset_index(name='interaction_count')
@@ -105,7 +147,6 @@ def export_data():
     df['interaction_count'] = df['interaction_count'].fillna(0)
     df['highest_purchase_month'] = df['highest_purchase_month'].fillna(0).astype(int)
     df['timestamp'] = df['timestamp'].fillna(pd.Timestamp('2025-01-01 00:00:00', tz='UTC'))
-    df['buyer_id'] = df['buyer_id'].replace('None', pd.NA).fillna('None')
 
     # Calculate demand score
     df['demand_score_raw'] = (

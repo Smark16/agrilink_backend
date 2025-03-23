@@ -26,14 +26,14 @@ FIREBASE_APP = firebase_admin.initialize_app(cred)
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-q0m=8zvj=y4hsi+we3s^o57&tad46fxoo(ody6i0d(h&wq^m6#'
+#SECRET_KEY = 'django-insecure-q0m=8zvj=y4hsi+we3s^o57&tad46fxoo(ody6i0d(h&wq^m6#'
 
-#SECRET_KEY = os.environ.get("SECRET_KEY")
+SECRET_KEY = os.environ.get("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+#DEBUG = True
 
-#DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = [
     'agrilink-backend-hjzl.onrender.com',
@@ -150,7 +150,7 @@ DATABASES = {
     #     'NAME': BASE_DIR / 'db.sqlite3',
     # }
     'default': dj_database_url.config(
-        default='postgres://agrilink_database_8zg4_user:GOpcP4im7aeTukPiJQvRbkLbZA5u5uxD@dpg-cus5v6gfnakc73evpul0-a.oregon-postgres.render.com:5432/agrilink_database_8zg4'
+        default='postgresql://agrlink_database_user:hmfg61c5ESeWQFri9DGTcg0F2P7dhcvA@dpg-cvg19et2ng1s73dakkkg-a.oregon-postgres.render.com/agrlink_database'
        )
 }
 
@@ -257,8 +257,8 @@ cloudinary.config(
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 # Celery Configuration
-CELERY_BROKER_URL = 'sqla+postgresql://agrilink_database_8zg4_user:GOpcP4im7aeTukPiJQvRbkLbZA5u5uxD@dpg-cus5v6gfnakc73evpul0-a.oregon-postgres.render.com:5432/agrilink_database_8zg4'
-CELERY_RESULT_BACKEND = 'db+postgresql://agrilink_database_8zg4_user:GOpcP4im7aeTukPiJQvRbkLbZA5u5uxD@dpg-cus5v6gfnakc73evpul0-a.oregon-postgres.render.com:5432/agrilink_database_8zg4'
+CELERY_BROKER_URL = 'sqla+postgresql://agrlink_database_user:hmfg61c5ESeWQFri9DGTcg0F2P7dhcvA@dpg-cvg19et2ng1s73dakkkg-a.oregon-postgres.render.com/agrlink_database'
+CELERY_RESULT_BACKEND = 'db+postgresql://agrlink_database_user:hmfg61c5ESeWQFri9DGTcg0F2P7dhcvA@dpg-cvg19et2ng1s73dakkkg-a.oregon-postgres.render.com/agrlink_database'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
