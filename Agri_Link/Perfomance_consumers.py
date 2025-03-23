@@ -127,7 +127,7 @@ class CropPerformanceConsumer(AsyncWebsocketConsumer):
                 "amount": str(total_amount),
                 "currency": "UGX",
                 "payment_options": "mobilemoneyuganda",
-                "redirect_url": "https://agrilink-backend-hjzl.onrender.com/Buyer/dashboard",
+                "redirect_url": "https://agrilink-jfb9.onrender.com/Buyer/buyer_dashboard",
                 "customer": {
                     "email": email,
                     "phone_number": phone_number,
