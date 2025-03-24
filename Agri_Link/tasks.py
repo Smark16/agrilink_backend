@@ -119,6 +119,7 @@ def export_data():
     df['buyer_id'] = df['buyer_id'].fillna('None')
 
     # Calculate demand score and preserve raw value
+
     df['demand_score_raw'] = (
         0.4 * df['quantity_sold'] +
         0.3 * df['purchases'] +
@@ -153,6 +154,19 @@ def train_recommendation_model():
         df.fillna(0, inplace=True)
         logger.info(f"CSV columns: {df.columns.tolist()}")
 
+         # Initialize the scaler
+        scaler = MinMaxScaler()
+
+        # List of numerical fields to normalize
+        numerical_fields = [
+            'demand_score', 'quantity_sold', 'purchases', 
+            'views', 'interaction_count', 'price_per_unit', 'availability'
+        ]
+
+        # Normalize each field
+        for field in numerical_fields:
+            df[field] = scaler.fit_transform(df[field].values.reshape(-1, 1)).flatten()
+
         # Engineer demand_score_raw
         required_cols = ['quantity_sold', 'purchases', 'views', 'interaction_count']
         if not all(col in df.columns for col in required_cols):
@@ -167,9 +181,7 @@ def train_recommendation_model():
         ).round(6)
         logger.info("demand_score_raw engineered")
 
-        # Normalize demand_score
-        scaler = MinMaxScaler()
-        df['demand_score'] = scaler.fit_transform(df['demand_score_raw'].values.reshape(-1, 1)).flatten()
+        # df['demand_score'] = scaler.fit_transform(df['demand_score_raw'].values.reshape(-1, 1)).flatten()
         logger.info("demand_score normalized")
 
         # Categorize demand_score
@@ -210,12 +222,18 @@ def train_recommendation_model():
         df['general_name'] = df['product_name'].apply(lambda x: similar_names.get(preprocess_text(x), x))
         logger.info("general_name engineered")
 
-        # Feature engineering
+        # Adjust interest_score with stronger location weighting
+        df['location_weight'] = np.where(
+        (df['buyer_location'] == 'Unknown') | (df['farmer_location'] == 'Unknown'),
+        0.8,
+        np.where(df['buyer_location'] == df['farmer_location'], 2.0, 1.0)
+    )
+
         df['interest_score'] = (
-            df['purchases'] * 0.5 +
-            df['views'] * 0.3 +
-            df['interaction_count'] * 0.2
-        )
+        df['purchases'] * 0.5 +
+        df['views'] * 0.3 +
+        df['interaction_count'] * 0.2
+    ) * df['location_weight']
         logger.info("interest_score engineered")
 
         # Build matrix with farmer_id, product_name tuples
