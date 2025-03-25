@@ -366,46 +366,46 @@ class CustomPagination(PageNumberPagination):
 
 #list farmer crops
 @api_view(['GET'])
-def ListFarmerCrops(request, farmer_id):
-    try:
-        farmer = User.objects.prefetch_related(
-            'crops',
-            'crops__ratings', #ratings of the crop
-            'crops__crop_review',
-        ).get(id=farmer_id, is_farmer=True)
-    except User.DoesNotExist:
-        return Response({'detail': 'Farmer not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    # Order crops by date added in descending order (most recent first)
-    crops = farmer.crops.order_by('-date_added')  
-
-    paginator = CustomPagination()
-    paginated_crops = paginator.paginate_queryset(crops, request)
-
-    farmer_serializer = FarmerCropsSerializer(farmer)
-    crops_serializer = CropfarmerSerializer(paginated_crops, many=True)
-
-    response_data = farmer_serializer.data
-    response_data['crops'] = crops_serializer.data  # Replace crops with paginated crops
-
-    return paginator.get_paginated_response(response_data)
-
 # def ListFarmerCrops(request, farmer_id):
-#     # Fetch the crops based on the farmer_id
-#     crops = Crop.objects.filter(user=farmer_id).select_related('specialisation').order_by('-date_added')
-    
-#     if not crops.exists():  # Check if there are no crops
-#         return Response([], status=status.HTTP_404_NOT_FOUND)  # Return empty list with 404 if no crops
+#     try:
+#         farmer = User.objects.prefetch_related(
+#             'crops',
+#             'crops__ratings', #ratings of the crop
+#             'crops__crop_review',
+#         ).get(id=farmer_id, is_farmer=True)
+#     except User.DoesNotExist:
+#         return Response({'detail': 'Farmer not found'}, status=status.HTTP_404_NOT_FOUND)
 
-#     if request.method == 'GET':
-#         # Initialize pagination
-#         paginator = CustomPagination()
-#         # Paginate the queryset
-#         paginated_crops = paginator.paginate_queryset(crops, request)
-#         # Serialize the paginated crops
-#         serializer = CropfarmerSerializer(paginated_crops, many=True)
-#         # Return paginated data
-#         return paginator.get_paginated_response(serializer.data)
+#     # Order crops by date added in descending order (most recent first)
+#     crops = farmer.crops.order_by('-date_added')  
+
+#     paginator = CustomPagination()
+#     paginated_crops = paginator.paginate_queryset(crops, request)
+
+#     farmer_serializer = FarmerCropsSerializer(farmer)
+#     crops_serializer = CropfarmerSerializer(paginated_crops, many=True)
+
+#     response_data = farmer_serializer.data
+#     response_data['crops'] = crops_serializer.data  # Replace crops with paginated crops
+
+#     return paginator.get_paginated_response(response_data)
+
+def ListFarmerCrops(request, farmer_id):
+    # Fetch the crops based on the farmer_id
+    crops = Crop.objects.filter(user=farmer_id).select_related('specialisation').order_by('-date_added')
+    
+    if not crops.exists():  # Check if there are no crops
+        return Response([], status=status.HTTP_404_NOT_FOUND)  # Return empty list with 404 if no crops
+
+    if request.method == 'GET':
+        # Initialize pagination
+        paginator = CustomPagination()
+        # Paginate the queryset
+        paginated_crops = paginator.paginate_queryset(crops, request)
+        # Serialize the paginated crops
+        serializer = CropfarmerSerializer(paginated_crops, many=True)
+        # Return paginated data
+        return paginator.get_paginated_response(serializer.data)
     
 #delete farmer crop
 class DeleteFarmerCrop(generics.RetrieveDestroyAPIView):
