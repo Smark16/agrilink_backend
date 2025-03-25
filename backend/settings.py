@@ -26,14 +26,14 @@ FIREBASE_APP = firebase_admin.initialize_app(cred)
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-q0m=8zvj=y4hsi+we3s^o57&tad46fxoo(ody6i0d(h&wq^m6#'
+#SECRET_KEY = 'django-insecure-q0m=8zvj=y4hsi+we3s^o57&tad46fxoo(ody6i0d(h&wq^m6#'
 
-#SECRET_KEY = os.environ.get("SECRET_KEY")
+SECRET_KEY = os.environ.get("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+#DEBUG = True
 
-#DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = [
     'agrilink-backend-hjzl.onrender.com',

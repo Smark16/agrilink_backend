@@ -71,7 +71,7 @@ class Specialisation(models.Model):
 
 # model profiles
 class Profile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile') #select_related
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile', db_index=True) #select_related
     verified = models.BooleanField(default=False)
     image = CloudinaryField('image', folder='AgriLink_Images/', null=True, blank=True)
     location = models.CharField(max_length=100, blank=True, null=True)
@@ -80,8 +80,8 @@ class Profile(models.Model):
     farmName = models.CharField(max_length=100, null=True, blank=True)
     farm_Image = CloudinaryField('image', folder='AgriLink_Images/', null=True, blank=True)
     specialisation = models.ManyToManyField(Specialisation)
-    is_farmer = models.BooleanField()
-    is_buyer = models.BooleanField()
+    is_farmer = models.BooleanField(db_index=True)
+    is_buyer = models.BooleanField(db_index=True)
 
 def create_profile(sender, instance, created, **kwargs):
     if created:
@@ -97,7 +97,7 @@ post_save.connect(save_profile, sender=User)
 
 #payment method 
 class PaymentMethod(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='payment_method')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='payment_method', db_index=True)
     methodType = models.JSONField(default=list, max_length=100)
     contact_name = models.CharField(max_length=100, blank=True, null=True)  
     contact_email = models.EmailField(blank=True, null=True)  
@@ -105,14 +105,14 @@ class PaymentMethod(models.Model):
 
 #delivery options
 class DeliveryOption(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='delivery_options')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='delivery_options', db_index=True)
     name = models.JSONField(default=list, max_length=100) 
     fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, null=True, blank=True)
     duration = models.CharField(max_length=50, blank=True, null=True)  
 
 # crop model
 class Crop(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='crops')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='crops', db_index=True)
     specialisation = models.ForeignKey(Specialisation, on_delete=models.CASCADE, related_name='crop_category')
     crop_name = models.CharField(max_length=100)
     description = models.TextField(max_length=255)
@@ -148,28 +148,28 @@ class Crop(models.Model):
         
 #Rating
 class Rating(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    crop = models.ForeignKey(Crop, on_delete=models.CASCADE, related_name='ratings')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, db_index=True)
+    crop = models.ForeignKey(Crop, on_delete=models.CASCADE, related_name='ratings', db_index=True)
     value = models.PositiveIntegerField()
 
 #Review
 class Review(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews', db_index=True)
     message = models.TextField(max_length=255)
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE)
-    crop = models.ForeignKey(Crop, on_delete=models.CASCADE, related_name='crop_review')
+    crop = models.ForeignKey(Crop, on_delete=models.CASCADE, related_name='crop_review', db_index=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
 # Notification
 class Notification(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', db_index=True)
     message = models.CharField(max_length=255)
     timestamp = models.DateTimeField(auto_now_add=True) 
     is_read = models.BooleanField(default=False)
 
 # user address
 class UserAddress(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='useraddress')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='useraddress', db_index=True)
     city = models.CharField(max_length=100)
     district = models.CharField(max_length=100)
     contact = models.CharField(max_length=100)
@@ -178,7 +178,7 @@ class UserAddress(models.Model):
 
 # Order
 class Order(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders', db_index=True)
     address = models.ForeignKey(UserAddress, on_delete=models.SET_NULL, null=True, blank=True,) #select_related
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateField(auto_now=True)
@@ -188,8 +188,8 @@ class Order(models.Model):
 
 #the ordered crops
 class OrderCrop(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='OrderCrop')
-    crop = models.ForeignKey(Crop, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='OrderCrop', db_index=True)
+    crop = models.ForeignKey(Crop, on_delete=models.CASCADE, db_index=True)
     quantity = models.PositiveIntegerField()
     weights = models.JSONField(default=list, blank=True, null=True)  
     price_per_unit = models.PositiveIntegerField() 
@@ -209,7 +209,7 @@ class OrderCrop(models.Model):
 
 # order Details
 class OrderDetail(models.Model):
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='order_detail')
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='order_detail', db_index=True)
     crop = models.ManyToManyField(OrderCrop) 
 
 # Discount
@@ -217,7 +217,7 @@ class Discount(models.Model):
     description = models.TextField(max_length=255)
     discount_percent = models.FloatField()
     active = models.BooleanField(default=False)
-    crop = models.ForeignKey(Crop, on_delete=models.CASCADE, related_name='discounts')
+    crop = models.ForeignKey(Crop, on_delete=models.CASCADE, related_name='discounts', db_index=True)
     orderCrop = models.ForeignKey(OrderCrop, on_delete=models.CASCADE, null=True, blank=True, related_name='order_discounts')
 
 # payment details
@@ -248,7 +248,7 @@ class CropPerformance(models.Model):
     
 #market trends
 class MarketTrend(models.Model):
-    crop = models.ForeignKey(Crop, on_delete=models.CASCADE, related_name='market_trends')
+    crop = models.ForeignKey(Crop, on_delete=models.CASCADE, related_name='market_trends', db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
     total_demand = models.IntegerField(default=0)
 
@@ -305,7 +305,7 @@ class MarketTrend(models.Model):
 
 #userInteractionLog
 class UserInteractionLog(models.Model):
-    crop = models.ForeignKey(Crop, on_delete=models.CASCADE, related_name='interaction_logs')
+    crop = models.ForeignKey(Crop, on_delete=models.CASCADE, related_name='interaction_logs', db_index=True)
     action = models.CharField(max_length=100)  
     monthly_stats = models.JSONField(default=list)
     timestamp = models.DateTimeField(auto_now_add=True)
