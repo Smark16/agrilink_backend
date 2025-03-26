@@ -234,7 +234,7 @@ def FarmerSpecialisations(request, special_id):
 
 # PROFILE VIEWS
 class FarmerProfiles(generics.ListAPIView):
-    queryset = Profile.objects.filter(is_farmer=True)
+    queryset = Profile.objects.select_related('user').prefetch_related('specialisation').filter(is_farmer=True)
     serializer_class = ProfileSerializer
 
 #retrieve user nested profile
