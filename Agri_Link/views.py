@@ -494,15 +494,23 @@ class PostOrderCrop(generics.CreateAPIView):
 @api_view(['GET'])
 def ListOrderFarmerCrops(request, farmer_id):
     try:
-        farmer = User.objects.prefetch_related(
-            'OrderCrop',
-        ).get(id=farmer_id, is_farmer=True)
+        # Option 1: Use select_related without only() for the related fields
+        crops = OrderCrop.objects.select_related(
+            'crop',
+            'buyer_id',
+            'user'
+        ).filter(
+            user_id=farmer_id
+        )
+        
+        if not crops.exists():
+            return Response({'detail': 'No orders found for this farmer'}, status=status.HTTP_404_NOT_FOUND)
+            
+        serializer = OrderCropSerializer(crops, many=True)
+        return Response(serializer.data)
+        
     except User.DoesNotExist:
         return Response({'detail': 'Farmer not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    crops = farmer.OrderCrop.all()
-    serializer = OrderCropSerializer(crops, many=True)
-    return Response(serializer.data)
     
 #RATINGS VIEW
 
