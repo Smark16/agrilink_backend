@@ -205,7 +205,7 @@ def recommend_products_for_buyer(buyer_id, affinity_df, df, top_n=3, threshold=0
         raise
     
     sorted_scores = pd.Series(general_scores).sort_values(ascending=False)
-    top_products = sorted_scores[sorted_scores > threshold].head(top_n)
+    top_products = sorted_scores[sorted_scores > threshold]
     
     logger.info(f"Top products: {top_products.to_dict()}")
     return {

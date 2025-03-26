@@ -283,7 +283,7 @@ class CropSerializer(serializers.ModelSerializer):
 class OrderCropSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderCrop
-        fields = ["id", "user", "buyer_id", "crop", "crop_name", "weights", "unit", "price_per_unit", "image", "quantity", "get_discounted_price"]
+        fields = ["id", "user", "buyer_id", "crop", "crop_name", "weights", "unit", "price_per_unit", "image", "quantity", "get_discounted_price", "timestamp"]
 
 #farmerCrops
 class FarmerCropsSerializer(serializers.ModelSerializer):

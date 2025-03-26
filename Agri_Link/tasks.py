@@ -24,121 +24,125 @@ DATA_DIR.mkdir(exist_ok=True)
 @shared_task
 def export_data():
     file_path = DATA_DIR / 'agrilink_data.csv'
+    
+    try:
+        # 1. Fetch basic crop data
+        crops = Crop.objects.all()
+        df = read_frame(crops, fieldnames=['id', 'user__id', 'crop_name', 'price_per_unit', 'unit', 'availability'])
+        df = df.rename(columns={'user__id': 'farmer_id', 'crop_name': 'product_name'})
 
-    # Fetch crop data
-    crops = Crop.objects.all()
-    df = read_frame(crops, fieldnames=['id', 'user__id', 'crop_name', 'price_per_unit', 'unit', 'availability'])
-    df = df.rename(columns={'user__id': 'farmer_id', 'crop_name': 'product_name'})
+        # 2. Get all order data
+        order_crops = OrderCrop.objects.select_related('crop', 'buyer_id').values(
+            'crop__id',
+            'buyer_id__id',
+            'quantity'
+        )
+        order_crops_df = pd.DataFrame(list(order_crops))
+        order_crops_df = order_crops_df.rename(columns={
+            'crop__id': 'crop_id',
+            'buyer_id__id': 'buyer_id'
+        })
 
-    # Fetch successful payments and calculate quantity sold
-    payments = PaymentDetails.objects.filter(status='successful')
-    quantity_sold_dict = {}
-    for payment in payments:
-        for quantity_item in payment.quantity:
-            crop_id = quantity_item['id']
-            quantity = quantity_item['quantity']
-            quantity_sold_dict[crop_id] = quantity_sold_dict.get(crop_id, 0) + quantity
+        # 3. Calculate quantity metrics
+        quantity_sold_df = order_crops_df.groupby('crop_id')['quantity'].sum().reset_index()
+        quantity_sold_df.columns = ['crop_id', 'quantity_sold']
+        
+        buyer_quantity_df = order_crops_df.groupby(['crop_id', 'buyer_id'])['quantity'].sum().reset_index()
+        buyer_quantity_df.columns = ['crop_id', 'buyer_id', 'buyer_quantity']
 
-    quantity_sold_df = pd.DataFrame(list(quantity_sold_dict.items()), columns=['crop_id', 'quantity_sold'])
-    df = df.merge(quantity_sold_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
-    df['quantity_sold'] = df['quantity_sold'].fillna(0)
+        # 4. Merge quantity data
+        df = df.merge(quantity_sold_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
+        df = df.merge(buyer_quantity_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
+        
+        # 5. Fill NA values for quantities
+        df['quantity_sold'] = df['quantity_sold'].fillna(0)
+        df['buyer_quantity'] = df['buyer_quantity'].fillna(0)
 
-    # Fetch orders for buyer_id
-    orders = Order.objects.all()
-    order_df = read_frame(orders, fieldnames=['user__id', 'address'])
-    df['buyer_id'] = order_df['user__id'].reindex(df.index, fill_value='None')
+        # 6. Add location data
+        # Buyer locations
+        address_df = read_frame(
+            UserAddress.objects.all(),
+            fieldnames=['user__id', 'district']
+        ).rename(columns={'user__id': 'buyer_id', 'district': 'buyer_location'})
+        df = df.merge(address_df, on='buyer_id', how='left')
+        
+        # Farmer locations
+        profile_df = read_frame(
+            Profile.objects.filter(is_farmer=True),
+            fieldnames=['user__id', 'location']
+        ).rename(columns={'user__id': 'farmer_id', 'location': 'farmer_location'})
+        df = df.merge(profile_df, on='farmer_id', how='left')
 
-    # Fetch address for buyers
-    address = UserAddress.objects.all()
-    add_df = read_frame(address, fieldnames=['user__id', 'district'])
-    add_df = add_df.rename(columns={'user__id': 'buyer_id', 'district': 'buyer_location'})
-    df = df.merge(add_df[['buyer_id', 'buyer_location']], on='buyer_id', how='left')
-    df['buyer_location'] = df['buyer_location'].fillna('Unknown')
+        # 7. Add interaction data
+        logs = UserInteractionLog.objects.all()
+        log_df = read_frame(logs, fieldnames=['crop__id', 'action', 'timestamp', 'monthly_stats'])
+        log_df = log_df.rename(columns={'crop__id': 'crop_id'})
+        log_df = log_df.dropna(subset=['crop_id'])
+        log_df['crop_id'] = pd.to_numeric(log_df['crop_id'], errors='coerce').astype('int64')
+        log_df['timestamp'] = pd.to_datetime(log_df['timestamp'], utc=True)
+        
+        latest_logs = log_df.loc[log_df.groupby('crop_id')['timestamp'].idxmax()]
 
-    # Fetch profile for farmers
-    profile = Profile.objects.filter(is_farmer=True)
-    prof_df = read_frame(profile, fieldnames=['user__id', 'location'])
-    prof_df = prof_df.rename(columns={'user__id': 'farmer_id', 'location': 'farmer_location'})
-    df = df.merge(prof_df[['farmer_id', 'farmer_location']], on='farmer_id', how='left')
-    df['farmer_location'] = df['farmer_location'].fillna('Unknown')
+        interaction_data = []
+        for _, log in latest_logs.iterrows():
+            monthly_stats = log['monthly_stats']
+            interaction_data.append({
+                'crop_id': log['crop_id'],
+                'views': sum(month['views'] for month in monthly_stats),
+                'purchases': sum(month['purchases'] for month in monthly_stats),
+                'interaction_count': logs.filter(crop__id=log['crop_id']).count(),
+                'highest_purchase_month': max(monthly_stats, key=lambda m: m['purchases'], default={'month': 0})['month'],
+                'timestamp': log['timestamp']
+            })
+        
+        interaction_df = pd.DataFrame(interaction_data)
+        df = df.merge(interaction_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
 
-    # Fetch interaction logs
-    logs = UserInteractionLog.objects.all()
-    log_df = read_frame(logs, fieldnames=['crop__id', 'action', 'timestamp', 'monthly_stats'])
-    log_df = log_df.rename(columns={'crop__id': 'crop_id'})
-    log_df = log_df.dropna(subset=['crop_id'])
-    log_df['crop_id'] = pd.to_numeric(log_df['crop_id'], errors='coerce').astype('int64')
+        # 8. Fill remaining NA values
+        fill_values = {
+            'buyer_location': 'Unknown',
+            'farmer_location': 'Unknown',
+            'views': 0,
+            'purchases': 0,
+            'interaction_count': 0,
+            'highest_purchase_month': 0,
+            'timestamp': pd.Timestamp('2025-01-01 00:00:00', tz='UTC')
+        }
+        df = df.fillna(fill_values)
 
-    # Sort by timestamp for latest log
-    log_df['timestamp'] = pd.to_datetime(log_df['timestamp'], utc=True)
-    latest_logs = log_df.loc[log_df.groupby('crop_id')['timestamp'].idxmax()]
+        # 9. Calculate demand scores
+        df['demand_score_raw'] = (
+            0.4 * df['quantity_sold'] +
+            0.3 * df['purchases'] +
+            0.2 * df['views'] +
+            0.1 * df['interaction_count']
+        ).round(6)
+        
+        scaler = MinMaxScaler()
+        df['demand_score'] = scaler.fit_transform(df['demand_score_raw'].values.reshape(-1, 1)).flatten()
 
-    # Calculate metrics
-    views_list = []
-    purchases_list = []
-    interaction_count_list = []
-    month_list = []
+        # 10. Define and save output
+        output_cols = [
+            'id', 'farmer_id', 'product_name', 'price_per_unit', 'unit', 'availability',
+            'quantity_sold', 'buyer_id', 'buyer_quantity', 'buyer_location', 'farmer_location',
+            'views', 'purchases', 'interaction_count', 'highest_purchase_month', 'timestamp',
+            'demand_score', 'demand_score_raw'
+        ]
+        
+        # Ensure all columns exist before saving
+        missing_cols = set(output_cols) - set(df.columns)
+        if missing_cols:
+            for col in missing_cols:
+                df[col] = None  # or appropriate default value
+        
+        df[output_cols].to_csv(file_path, index=False)
+        df[output_cols].to_csv('C:/Users/HP/Desktop/Datasets/agrilink_data.csv', index=False)
+        logger.info(f"Successfully exported data to {file_path}")
+        return f"Successfully exported data to {file_path}"
 
-    for _, log in latest_logs.iterrows():
-        crop_id = log['crop_id']
-        monthly_stats = log['monthly_stats']
-        total_views = sum(month['views'] for month in monthly_stats)
-        total_purchases = sum(month['purchases'] for month in monthly_stats)
-        highest_purchase_month = max(monthly_stats, key=lambda m: m['purchases'], default={'month': 0})['month']
-
-        views_list.append({'crop_id': crop_id, 'views': total_views})
-        purchases_list.append({'crop_id': crop_id, 'purchases': total_purchases})
-        interaction_count_list.append({'crop_id': crop_id, 'interaction_count': logs.filter(crop__id=crop_id).count()})
-        month_list.append({'crop_id': crop_id, 'highest_purchase_month': highest_purchase_month})
-
-    views_df = pd.DataFrame(views_list)
-    purchases_df = pd.DataFrame(purchases_list)
-    interaction_count_df = pd.DataFrame(interaction_count_list)
-    month_df = pd.DataFrame(month_list)
-
-    for temp_df in [views_df, purchases_df, interaction_count_df, month_df]:
-        temp_df['crop_id'] = pd.to_numeric(temp_df['crop_id'], errors='coerce').astype('int64')
-
-    # Merge into main DataFrame
-    df = df.merge(views_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
-    df = df.merge(purchases_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
-    df = df.merge(interaction_count_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
-    df = df.merge(month_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
-
-    # Add timestamp
-    timestamp_df = latest_logs[['crop_id', 'timestamp']].copy()
-    timestamp_df['crop_id'] = pd.to_numeric(timestamp_df['crop_id'], errors='coerce').astype('int64')
-    df = df.merge(timestamp_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
-
-    # Fill NaN values
-    df['views'] = df['views'].fillna(0)
-    df['purchases'] = df['purchases'].fillna(0)
-    df['interaction_count'] = df['interaction_count'].fillna(0)
-    df['highest_purchase_month'] = df['highest_purchase_month'].fillna(0).astype(int)
-    df['timestamp'] = df['timestamp'].fillna(pd.Timestamp('2025-01-01 00:00:00', tz='UTC'))
-    df['buyer_id'] = df['buyer_id'].fillna('None')
-
-    # Calculate demand score and preserve raw value
-
-    df['demand_score_raw'] = (
-        0.4 * df['quantity_sold'] +
-        0.3 * df['purchases'] +
-        0.2 * df['views'] +
-        0.1 * df['interaction_count']
-    ).round(6)
-    df['demand_score'] = df['demand_score_raw']
-
-    # Define output columns
-    output_cols = ['id', 'farmer_id', 'product_name', 'price_per_unit', 'unit', 'availability', 
-                   'quantity_sold', 'buyer_id', 'buyer_location', 'farmer_location', 'views', 
-                   'purchases', 'interaction_count', 'highest_purchase_month', 'timestamp', 
-                   'demand_score', 'demand_score_raw']
-
-    # Save to CSV
-    df[output_cols].to_csv(file_path, index=False)
-    df[output_cols].to_csv('C:/Users/HP/Desktop/Datasets/agrilink_data.csv', index=False)
-    logger.info(f"Exported data to {file_path} with {len(df)} rows")
-    return f"Exported data to {file_path}"
+    except Exception as e:
+        logger.error(f"Error in export_data: {str(e)}", exc_info=True)
+        raise ValueError(f"Data export failed: {str(e)}")
 
 @shared_task
 def train_recommendation_model():
@@ -160,7 +164,7 @@ def train_recommendation_model():
         # List of numerical fields to normalize
         numerical_fields = [
             'demand_score', 'quantity_sold', 'purchases', 
-            'views', 'interaction_count', 'price_per_unit', 'availability'
+            'views', 'interaction_count', 'price_per_unit', 'availability', 'buyer_quantity'
         ]
 
         # Normalize each field
@@ -173,6 +177,7 @@ def train_recommendation_model():
             missing = [col for col in required_cols if col not in df.columns]
             logger.error(f"Missing columns for demand_score_raw: {missing}")
             raise ValueError(f"CSV missing required columns: {missing}")
+        
         df['demand_score_raw'] = (
             0.4 * df['quantity_sold'] +
             0.3 * df['purchases'] +
@@ -181,7 +186,6 @@ def train_recommendation_model():
         ).round(6)
         logger.info("demand_score_raw engineered")
 
-        # df['demand_score'] = scaler.fit_transform(df['demand_score_raw'].values.reshape(-1, 1)).flatten()
         logger.info("demand_score normalized")
 
         # Categorize demand_score
@@ -230,9 +234,10 @@ def train_recommendation_model():
     )
 
         df['interest_score'] = (
-        df['purchases'] * 0.5 +
-        df['views'] * 0.3 +
-        df['interaction_count'] * 0.2
+        df['buyer_quantity'] * 0.4 +
+        df['purchases'] * 0.3 +
+        df['views'] * 0.2 +
+        df['interaction_count'] * 0.1
     ) * df['location_weight']
         logger.info("interest_score engineered")
 

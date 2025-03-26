@@ -392,7 +392,7 @@ class CustomPagination(PageNumberPagination):
 
 def ListFarmerCrops(request, farmer_id):
     # Fetch the crops based on the farmer_id
-    crops = Crop.objects.filter(user=farmer_id).select_related('specialisation').order_by('-date_added')
+    crops = Crop.objects.filter(user=farmer_id).select_related('specialisation', 'user').order_by('-date_added')
     
     if not crops.exists():  # Check if there are no crops
         return Response([], status=status.HTTP_404_NOT_FOUND)  # Return empty list with 404 if no crops

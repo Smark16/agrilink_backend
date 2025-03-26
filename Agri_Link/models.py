@@ -197,6 +197,7 @@ class OrderCrop(models.Model):
     unit = models.CharField(max_length=100)  
     image = CloudinaryField('image', folder='AgriLink_Images/')
     crop_name = models.CharField(max_length=100)
+    timestamp = models.DateTimeField(auto_now_add=True)
 
     @property
     def get_discounted_price(self):
