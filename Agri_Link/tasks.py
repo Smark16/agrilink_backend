@@ -186,7 +186,7 @@ def train_recommendation_model():
         # List of numerical fields to normalize
         numerical_fields = [
             'demand_score', 'quantity_sold', 'purchases', 
-            'views', 'interaction_count', 'price_per_unit', 'availability', 'buyer_quantity'
+            'views', 'interaction_count', 'price_per_unit', 'availability', 'total_quantity', 'purchase_frequency'	
         ]
 
         # Normalize each field
@@ -201,10 +201,11 @@ def train_recommendation_model():
             raise ValueError(f"CSV missing required columns: {missing}")
         
         df['demand_score_raw'] = (
-            0.4 * df['quantity_sold'] +
-            0.3 * df['purchases'] +
+            0.3 * df['quantity_sold'] +
+            0.25 * df['purchases'] +
             0.2 * df['views'] +
-            0.1 * df['interaction_count']
+            0.15 * (1 / (1 + df['days_since_last_purchase'])) +
+            0.1 * df['purchase_frequency']
         ).round(6)
         logger.info("demand_score_raw engineered")
 
@@ -248,19 +249,24 @@ def train_recommendation_model():
         df['general_name'] = df['product_name'].apply(lambda x: similar_names.get(preprocess_text(x), x))
         logger.info("general_name engineered")
 
-        # Adjust interest_score with stronger location weighting
+       # Calculate recency weight with a shorter half-life (e.g., 7 days) for more sensitivity
+        df['days_since_last_purchase'] = df['days_since_last_purchase'].replace(float('inf'), 365)  # Cap at 1 year for no purchases
+        df['recency_weight'] = np.exp(-df['days_since_last_purchase'] / 7)  # Half-life of 7 days
+
+
+        # Location weighting (slightly adjusted range)
         df['location_weight'] = np.where(
-        (df['buyer_location'] == 'Unknown') | (df['farmer_location'] == 'Unknown'),
-        0.8,
-        np.where(df['buyer_location'] == df['farmer_location'], 2.0, 1.0)
-    )
+            (df['buyer_location'] == 'Unknown') | (df['farmer_location'] == 'Unknown'),
+            0.9,  # Less penalty for unknowns
+            np.where(df['buyer_location'] == df['farmer_location'], 1.5, 1.0)  # Moderate boost for local
+        )
 
         df['interest_score'] = (
-        df['buyer_quantity'] * 0.4 +
-        df['purchases'] * 0.3 +
-        df['views'] * 0.2 +
-        df['interaction_count'] * 0.1
-    ) * df['location_weight']
+            0.4 * df['purchase_frequency'] +          # Volume matters most (50%)
+            0.3 * df['total_quantity'] +              # Consistency matters (30%)
+            0.2 * df['recency_weight'] +
+            0.1 * df['views']
+        ) * df['location_weight']
         logger.info("interest_score engineered")
 
         # Build matrix with farmer_id, product_name tuples

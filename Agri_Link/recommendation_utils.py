@@ -171,7 +171,7 @@ def Interested_buyers_for_farmer_product(farmer_id, affinity_df, df, product_nam
             continue
         
         buyer_scores = affinity_df[matching_columns].mean(axis=1).sort_values(ascending=False)
-        interested_buyers = buyer_scores[buyer_scores > threshold].head(top_n)
+        interested_buyers = buyer_scores[buyer_scores > threshold]
         max_score = buyer_scores.max() if buyer_scores.max() > 0 else 1
         confidence_scores = (interested_buyers / max_score * 100).tolist()
         product_demand = get_avg_demand(general_name, df, farmer_id=None)
