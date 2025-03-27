@@ -366,30 +366,6 @@ class CustomPagination(PageNumberPagination):
 
 #list farmer crops
 @api_view(['GET'])
-# def ListFarmerCrops(request, farmer_id):
-#     try:
-#         farmer = User.objects.prefetch_related(
-#             'crops',
-#             'crops__ratings', #ratings of the crop
-#             'crops__crop_review',
-#         ).get(id=farmer_id, is_farmer=True)
-#     except User.DoesNotExist:
-#         return Response({'detail': 'Farmer not found'}, status=status.HTTP_404_NOT_FOUND)
-
-#     # Order crops by date added in descending order (most recent first)
-#     crops = farmer.crops.order_by('-date_added')  
-
-#     paginator = CustomPagination()
-#     paginated_crops = paginator.paginate_queryset(crops, request)
-
-#     farmer_serializer = FarmerCropsSerializer(farmer)
-#     crops_serializer = CropfarmerSerializer(paginated_crops, many=True)
-
-#     response_data = farmer_serializer.data
-#     response_data['crops'] = crops_serializer.data  # Replace crops with paginated crops
-
-#     return paginator.get_paginated_response(response_data)
-
 def ListFarmerCrops(request, farmer_id):
     # Fetch the crops based on the farmer_id
     crops = Crop.objects.filter(user=farmer_id).select_related('specialisation', 'user').order_by('-date_added')
@@ -732,18 +708,48 @@ class SingleOrder(generics.RetrieveAPIView):
 @api_view(['GET'])
 def orders_for_farmer(request, farmer_id):
     try:
-        farmer = User.objects.get(pk=farmer_id)
-        farmer_crops = OrderCrop.objects.filter(user=farmer)
+        # Get the farmer and prefetch all necessary related data in a single query
+        farmer = User.objects.select_related('farmer').get(pk=farmer_id, is_farmer=True)
         
-        # Fetch unique orders for the crops, ordered by creation date
-        orders = Order.objects.filter(order_detail__crop__in=farmer_crops).distinct().order_by('-created_at')
+        # Fetch all order crops for this farmer with related data
+        farmer_crops = OrderCrop.objects.filter(user=farmer).select_related(
+            'buyer_id', 'crop'
+        )
         
+        # Get all order IDs that contain these crops
+        order_ids = OrderDetail.objects.filter(
+            crop__in=farmer_crops
+        ).values_list('order_id', flat=True).distinct()
+        
+        # Fetch all orders with their related data in optimized queries
+        orders = Order.objects.filter(
+            id__in=order_ids
+        ).select_related(
+            'user', 'address'
+        ).prefetch_related(
+            Prefetch(
+                'order_detail',
+                queryset=OrderDetail.objects.prefetch_related(
+                    Prefetch(
+                        'crop',
+                        queryset=OrderCrop.objects.select_related('crop')
+                    )
+                )
+            ),
+            Prefetch(
+                'payment',
+                queryset=PaymentDetails.objects.only(
+                    'order_id', 'amount', 'network', 'status'
+                )
+            )
+        ).order_by('-created_at')
+        
+        # Prepare the response data
         orders_data = []
         for order in orders:
-            order_details = OrderDetail.objects.filter(order=order).prefetch_related('crop')
-            
+            # Get all crops for this order
             crops_data = []
-            for detail in order_details:
+            for detail in order.order_detail.all():
                 for crop in detail.crop.all():
                     crops_data.append({
                         "crop_name": crop.crop_name,
@@ -752,9 +758,9 @@ def orders_for_farmer(request, farmer_id):
                         "unit": crop.unit,
                         "image": crop.image.url if crop.image else None,
                     })
-
-            # Fetch payment details for the order
-            payment_details = PaymentDetails.objects.filter(order=order).first()
+            
+            # Get payment details (using first() since we prefetched)
+            payment_details = order.payment.first()
             
             orders_data.append({
                 "order_id": order.id,
@@ -763,9 +769,9 @@ def orders_for_farmer(request, farmer_id):
                 "city": order.address.city if order.address else "No city provided",
                 "contact": order.address.contact if order.address else "No contact",
                 "district": order.address.district if order.address else "No district provided",
-                "delivery_Option":order.delivery_option,
+                "delivery_Option": order.delivery_option,
                 "crops": crops_data,
-                "payment_method":order.payment_method,
+                "payment_method": order.payment_method,
                 "payment": {
                     "amount": payment_details.amount if payment_details else "No",
                     "provider": payment_details.network if payment_details else "No provider",
@@ -783,7 +789,6 @@ def orders_for_farmer(request, farmer_id):
         return Response({"error": "Farmer not found"}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
-
 
 #daily order trends
 @api_view(['GET'])

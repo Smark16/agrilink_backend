@@ -9,6 +9,7 @@ from django_pandas.io import read_frame
 from sklearn.preprocessing import MinMaxScaler
 from Agri_Link.models import Crop, PaymentDetails, UserInteractionLog, Order, OrderDetail, OrderCrop, UserAddress, Profile
 from pathlib import Path
+from datetime import datetime
 
 import logging
 
@@ -31,49 +32,68 @@ def export_data():
         df = read_frame(crops, fieldnames=['id', 'user__id', 'crop_name', 'price_per_unit', 'unit', 'availability'])
         df = df.rename(columns={'user__id': 'farmer_id', 'crop_name': 'product_name'})
 
-        # 2. Get all order data
+        # 2. Get all order data with timestamps (ensure UTC timezone)
         order_crops = OrderCrop.objects.select_related('crop', 'buyer_id').values(
             'crop__id',
             'buyer_id__id',
-            'quantity'
+            'quantity',
+            'timestamp'
         )
         order_crops_df = pd.DataFrame(list(order_crops))
         order_crops_df = order_crops_df.rename(columns={
             'crop__id': 'crop_id',
             'buyer_id__id': 'buyer_id'
         })
+        # Ensure timestamp is timezone-aware UTC
+        order_crops_df['timestamp'] = pd.to_datetime(order_crops_df['timestamp'], utc=True)
 
-        # 3. Calculate quantity metrics
+        # 3. Calculate buyer purchase metrics
+        # Current date in UTC to match order timestamps
+        current_date = pd.Timestamp.now(tz='UTC')
+        
+        purchase_freq_df = order_crops_df.groupby(['crop_id', 'buyer_id']).agg(
+            purchase_frequency=('timestamp', 'count'),
+            last_purchase_date=('timestamp', 'max'),
+            total_quantity=('quantity', 'sum')
+        ).reset_index()
+        
+        # Calculate days since last purchase (both timestamps in UTC)
+        purchase_freq_df['days_since_last_purchase'] = (
+            (current_date - purchase_freq_df['last_purchase_date']).dt.total_seconds() / (24 * 60 * 60)
+        ).round().astype(int)
+
+        # 4. Calculate product-level quantity metrics
         quantity_sold_df = order_crops_df.groupby('crop_id')['quantity'].sum().reset_index()
         quantity_sold_df.columns = ['crop_id', 'quantity_sold']
-        
-        buyer_quantity_df = order_crops_df.groupby(['crop_id', 'buyer_id'])['quantity'].sum().reset_index()
-        buyer_quantity_df.columns = ['crop_id', 'buyer_id', 'buyer_quantity']
 
-        # 4. Merge quantity data
+        # 5. Merge all data
         df = df.merge(quantity_sold_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
-        df = df.merge(buyer_quantity_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
+        df = df.merge(purchase_freq_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
         
-        # 5. Fill NA values for quantities
-        df['quantity_sold'] = df['quantity_sold'].fillna(0)
-        df['buyer_quantity'] = df['buyer_quantity'].fillna(0)
+        # 6. Fill NA values
+        fill_values = {
+            'quantity_sold': 0,
+            'purchase_frequency': 0,
+            'total_quantity': 0,
+            'days_since_last_purchase': 9999,  # Large number for never purchased
+            'last_purchase_date': pd.NaT
+        }
+        df = df.fillna(fill_values)
 
-        # 6. Add location data
-        # Buyer locations
+        # 7. Add location data
         address_df = read_frame(
             UserAddress.objects.all(),
             fieldnames=['user__id', 'district']
         ).rename(columns={'user__id': 'buyer_id', 'district': 'buyer_location'})
         df = df.merge(address_df, on='buyer_id', how='left')
         
-        # Farmer locations
         profile_df = read_frame(
             Profile.objects.filter(is_farmer=True),
             fieldnames=['user__id', 'location']
         ).rename(columns={'user__id': 'farmer_id', 'location': 'farmer_location'})
         df = df.merge(profile_df, on='farmer_id', how='left')
 
-        # 7. Add interaction data
+        # 8. Add interaction data (ensure UTC timezone)
         logs = UserInteractionLog.objects.all()
         log_df = read_frame(logs, fieldnames=['crop__id', 'action', 'timestamp', 'monthly_stats'])
         log_df = log_df.rename(columns={'crop__id': 'crop_id'})
@@ -98,52 +118,54 @@ def export_data():
         interaction_df = pd.DataFrame(interaction_data)
         df = df.merge(interaction_df, left_on='id', right_on='crop_id', how='left').drop(columns=['crop_id'])
 
-        # 8. Fill remaining NA values
-        fill_values = {
+        # 9. Fill remaining NA values
+        additional_fill_values = {
             'buyer_location': 'Unknown',
             'farmer_location': 'Unknown',
             'views': 0,
             'purchases': 0,
             'interaction_count': 0,
             'highest_purchase_month': 0,
-            'timestamp': pd.Timestamp('2025-01-01 00:00:00', tz='UTC')
+            'timestamp': pd.Timestamp('2025-01-01 00:00:00', tz='UTC')  # Ensure timezone
         }
-        df = df.fillna(fill_values)
+        df = df.fillna(additional_fill_values)
 
-        # 9. Calculate demand scores
+        # 10. Calculate demand scores
         df['demand_score_raw'] = (
-            0.4 * df['quantity_sold'] +
-            0.3 * df['purchases'] +
+            0.3 * df['quantity_sold'] +
+            0.25 * df['purchases'] +
             0.2 * df['views'] +
-            0.1 * df['interaction_count']
+            0.15 * (1 / (1 + df['days_since_last_purchase'])) +
+            0.1 * df['purchase_frequency']
         ).round(6)
         
         scaler = MinMaxScaler()
         df['demand_score'] = scaler.fit_transform(df['demand_score_raw'].values.reshape(-1, 1)).flatten()
 
-        # 10. Define and save output
+        # 11. Define and save output
         output_cols = [
             'id', 'farmer_id', 'product_name', 'price_per_unit', 'unit', 'availability',
-            'quantity_sold', 'buyer_id', 'buyer_quantity', 'buyer_location', 'farmer_location',
-            'views', 'purchases', 'interaction_count', 'highest_purchase_month', 'timestamp',
-            'demand_score', 'demand_score_raw'
+            'quantity_sold', 'buyer_id', 'total_quantity', 'purchase_frequency', 
+            'days_since_last_purchase', 'last_purchase_date', 'buyer_location', 
+            'farmer_location', 'views', 'purchases', 'interaction_count', 
+            'highest_purchase_month', 'timestamp', 'demand_score', 'demand_score_raw'
         ]
         
         # Ensure all columns exist before saving
         missing_cols = set(output_cols) - set(df.columns)
         if missing_cols:
             for col in missing_cols:
-                df[col] = None  # or appropriate default value
+                df[col] = None
         
         df[output_cols].to_csv(file_path, index=False)
         df[output_cols].to_csv('C:/Users/HP/Desktop/Datasets/agrilink_data.csv', index=False)
-        logger.info(f"Successfully exported data to {file_path}")
-        return f"Successfully exported data to {file_path}"
+        logger.info(f"Successfully exported enhanced data to {file_path}")
+        return f"Successfully exported enhanced data to {file_path}"
 
     except Exception as e:
         logger.error(f"Error in export_data: {str(e)}", exc_info=True)
         raise ValueError(f"Data export failed: {str(e)}")
-
+    
 @shared_task
 def train_recommendation_model():
     try:
