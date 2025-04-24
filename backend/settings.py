@@ -150,7 +150,7 @@ DATABASES = {
     #     'NAME': BASE_DIR / 'db.sqlite3',
     # }
     'default': dj_database_url.config(
-        default='postgresql://agrlink_database_user:hmfg61c5ESeWQFri9DGTcg0F2P7dhcvA@dpg-cvg19et2ng1s73dakkkg-a.oregon-postgres.render.com/agrlink_database'
+        default='postgresql://agrlink_database_hzh9_user:CGZfoyX62Bdkb8fk3ZTRxbnecwaBhLp6@dpg-d051df3e5dus738q8p7g-a.oregon-postgres.render.com/agrlink_database_hzh9'
        )
 }
 
